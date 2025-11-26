@@ -1,0 +1,122 @@
+﻿<Window x:Class="IndiLogs_3._0.Views.AnalysisReportWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Mechanit Analysis Report" Height="650" Width="1000"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgDark}">
+
+    <Grid>
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <Border Grid.Column="0" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Padding="10">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="Detected Processes" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,10"/>
+
+                <ListBox x:Name="RunsList" 
+                         ItemsSource="{Binding AllResults}" 
+                         DisplayMemberPath="ProcessName"
+                         Background="Transparent" 
+                         BorderThickness="0" 
+                         Foreground="{DynamicResource TextPrimary}">
+                    <ListBox.ItemContainerStyle>
+                        <Style TargetType="ListBoxItem">
+                            <Setter Property="Padding" Value="10"/>
+                            <Setter Property="Cursor" Value="Hand"/>
+                            <Style.Triggers>
+                                <Trigger Property="IsSelected" Value="True">
+                                    <Setter Property="Background" Value="{DynamicResource PrimaryColor}"/>
+                                    <Setter Property="Foreground" Value="White"/>
+                                    <Setter Property="FontWeight" Value="Bold"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListBox.ItemContainerStyle>
+                </ListBox>
+            </Grid>
+        </Border>
+
+        <Grid Grid.Column="1" Margin="20">
+
+            <TextBlock Text="Select a run from the left to view details." 
+                       VerticalAlignment="Center" HorizontalAlignment="Center" 
+                       Foreground="{DynamicResource TextSecondary}"
+                       FontSize="16">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding SelectedItem, ElementName=RunsList}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Visible"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+
+            <Grid DataContext="{Binding SelectedItem, ElementName=RunsList}">
+                <Grid.Style>
+                    <Style TargetType="Grid">
+                        <Setter Property="Visibility" Value="Visible"/>
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </Grid.Style>
+
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" BorderBrush="{Binding StatusColor}" BorderThickness="0,0,0,2" Padding="0,0,0,10" Margin="0,0,0,15">
+                    <DockPanel>
+                        <Ellipse Width="20" Height="20" Fill="{Binding StatusColor}" DockPanel.Dock="Left" Margin="0,0,10,0"/>
+                        <TextBlock Text="{Binding ProcessName}" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                        <TextBlock Text="{Binding Status}" Foreground="{Binding StatusColor}" FontWeight="SemiBold" FontSize="16" HorizontalAlignment="Right" DockPanel.Dock="Right"/>
+                    </DockPanel>
+                </Border>
+
+                <StackPanel Grid.Row="1">
+                    <TextBlock Text="Summary:" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}"/>
+
+                    <TextBlock Text="{Binding Summary}" Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap" Margin="0,5,0,15" FontSize="14"/>
+
+                    <Expander Header="Issues Found" IsExpanded="True" BorderBrush="{DynamicResource DangerColor}" Foreground="{DynamicResource DangerColor}" Margin="0,0,0,15">
+                        <Expander.Style>
+                            <Style TargetType="Expander">
+                                <Setter Property="Visibility" Value="Visible"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding ErrorsFound.Count}" Value="0">
+                                        <Setter Property="Visibility" Value="Collapsed"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Expander.Style>
+
+                        <ListBox ItemsSource="{Binding ErrorsFound}" Background="{DynamicResource BgCard}" BorderThickness="0" Margin="0,5,0,0" MaxHeight="150">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <TextBlock Text="{Binding}" Foreground="#FF6B6B" TextWrapping="Wrap"/>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
+                        </ListBox>
+                    </Expander>
+                </StackPanel>
+            </Grid>
+
+            <Button VerticalAlignment="Bottom" HorizontalAlignment="Right" 
+                    Content="Close" Click="Close_Click" Style="{DynamicResource ModernBtn}" Width="100"/>
+        </Grid>
+    </Grid>
+</Window>

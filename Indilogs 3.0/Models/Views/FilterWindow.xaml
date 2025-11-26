@@ -1,0 +1,135 @@
+﻿<Window x:Class="IndiLogs_3._0.Views.FilterWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:sys="clr-namespace:System;assembly=mscorlib"
+        xmlns:models="clr-namespace:IndiLogs_3._0.Models"
+        Title="Advanced Filter Editor" Height="600" Width="850"
+        WindowStartupLocation="CenterOwner" 
+        Background="{DynamicResource BgDark}"
+        FontFamily="{DynamicResource GlobalFontFamily}">
+
+    <Window.Resources>
+        <x:Array x:Key="FilterFields" Type="sys:String">
+            <sys:String>Message</sys:String>
+            <sys:String>Level</sys:String>
+            <sys:String>ThreadName</sys:String>
+            <sys:String>Logger</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="FilterOperators" Type="sys:String">
+            <sys:String>Contains</sys:String>
+            <sys:String>Equals</sys:String>
+            <sys:String>Begins With</sys:String>
+            <sys:String>Ends With</sys:String>
+            <sys:String>Regex</sys:String>
+        </x:Array>
+
+        <x:Array x:Key="LogicalOperators" Type="sys:String">
+            <sys:String>AND</sys:String>
+            <sys:String>OR</sys:String>
+            <sys:String>NOT</sys:String>
+        </x:Array>
+
+        <HierarchicalDataTemplate DataType="{x:Type models:FilterNode}" ItemsSource="{Binding Children}">
+            <StackPanel Orientation="Horizontal" Margin="2">
+
+                <StackPanel Orientation="Horizontal" Margin="5,2">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Type}" Value="Group">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <ComboBox ItemsSource="{StaticResource LogicalOperators}"
+                      SelectedItem="{Binding LogicalOperator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" 
+                      IsEditable="False" Width="80" Margin="0,0,5,0" Style="{x:Null}" FontFamily="{DynamicResource GlobalFontFamily}"/>
+
+                    <Button Command="{Binding DataContext.AddConditionCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                    CommandParameter="{Binding}" 
+                    Width="30" Height="26" Margin="0,0,5,0" 
+                    Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1"
+                    Foreground="{DynamicResource TextPrimary}"
+                    Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                    ToolTip="Add Condition">
+                        <TextBlock Text="+" FontSize="20" FontWeight="Bold" Margin="0,-2,0,0"/>
+                    </Button>
+
+                    <Button Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                    CommandParameter="{Binding}" 
+                    Width="30" Height="26"
+                    Background="{DynamicResource DangerColor}" BorderThickness="0"
+                    Foreground="White"
+                    Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                    ToolTip="Remove Group">
+                        <TextBlock Text="-" FontSize="24" FontWeight="Bold" Margin="0,-4,0,0"/>
+                    </Button>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Margin="5,2">
+                    <StackPanel.Style>
+                        <Style TargetType="StackPanel">
+                            <Setter Property="Visibility" Value="Collapsed"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Type}" Value="Condition">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </StackPanel.Style>
+
+                    <TextBlock Text="[" VerticalAlignment="Center" Margin="0,0,2,0" Foreground="{DynamicResource PrimaryHover}" FontWeight="Bold" FontFamily="{DynamicResource GlobalFontFamily}"/>
+                    <ComboBox ItemsSource="{StaticResource FilterFields}" SelectedItem="{Binding Field, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" Width="100" Margin="0,0,5,0" FontFamily="{DynamicResource GlobalFontFamily}"/>
+                    <TextBlock Text="]" VerticalAlignment="Center" Margin="0,0,5,0" Foreground="{DynamicResource PrimaryHover}" FontWeight="Bold" FontFamily="{DynamicResource GlobalFontFamily}"/>
+
+                    <ComboBox ItemsSource="{StaticResource FilterOperators}" SelectedItem="{Binding Operator, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" IsEditable="False" Width="100" Margin="0,0,5,0" FontFamily="{DynamicResource GlobalFontFamily}"/>
+
+                    <TextBox Text="{Binding Value, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" Width="150" Margin="0,0,5,0" VerticalContentAlignment="Center"
+                     Background="{DynamicResource BgPanel}" Foreground="{DynamicResource TextPrimary}" BorderBrush="{DynamicResource BorderColor}" FontFamily="{DynamicResource GlobalFontFamily}"/>
+
+                    <Button Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                    CommandParameter="{Binding}" 
+                    Width="30" Height="26"
+                    Background="{DynamicResource DangerColor}" BorderThickness="0"
+                    Foreground="White"
+                    Padding="0" VerticalContentAlignment="Center" HorizontalContentAlignment="Center"
+                    ToolTip="Remove Condition">
+                        <TextBlock Text="-" FontSize="24" FontWeight="Bold" Margin="0,-4,0,0"/>
+                    </Button>
+                </StackPanel>
+            </StackPanel>
+        </HierarchicalDataTemplate>
+    </Window.Resources>
+
+    <Grid Margin="10">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TextBlock Grid.Row="0" Text="Build Filter Tree" FontSize="16" FontWeight="Bold" Margin="0,0,0,10" Foreground="{DynamicResource TextPrimary}"/>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto">
+            <TreeView ItemsSource="{Binding RootNodes}" Background="{DynamicResource BgCard}" BorderThickness="1" BorderBrush="{DynamicResource BorderColor}" Foreground="{DynamicResource TextPrimary}">
+                <TreeView.ItemContainerStyle>
+                    <Style TargetType="TreeViewItem">
+                        <Setter Property="IsExpanded" Value="True"/>
+                        <Setter Property="BorderThickness" Value="0"/>
+                        <Setter Property="Padding" Value="2"/>
+                    </Style>
+                </TreeView.ItemContainerStyle>
+            </TreeView>
+        </ScrollViewer>
+
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,10,0,0">
+            <Button Content="🗑 Clear All" Click="Clear_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource DangerColor}" Foreground="White"/>
+            <Button Content="✔ OK" Click="Apply_Click" Style="{DynamicResource ModernBtn}" Background="#10B981" Foreground="White"/>
+            <Button Content="✖ Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Background="#6C757D" Foreground="White"/>
+        </StackPanel>
+    </Grid>
+</Window>

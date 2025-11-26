@@ -1,0 +1,172 @@
+﻿<Window x:Class="IndiLogs_3._0.Views.HelpWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="IndiLogs 3.0 - User Guide" Height="700" Width="850"
+        WindowStartupLocation="CenterScreen"
+        Background="{DynamicResource BgDark}">
+
+    <Window.Resources>
+        <Style TargetType="TextBlock">
+            <Setter Property="FontFamily" Value="Segoe UI"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+            <Setter Property="TextWrapping" Value="Wrap"/>
+            <Setter Property="Margin" Value="0,0,0,10"/>
+        </Style>
+        <Style TargetType="Run">
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+        </Style>
+        <Style x:Key="HeaderStyle" TargetType="TextBlock">
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontWeight" Value="Bold"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}"/>
+            <Setter Property="Margin" Value="0,15,0,5"/>
+        </Style>
+    </Window.Resources>
+
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+        </Grid.RowDefinitions>
+
+        <TabControl Grid.Row="0" Margin="10" Background="Transparent" BorderThickness="0">
+
+            <TabItem Header="General &amp; Marking">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="Search (Ctrl + F)" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • Press <Run>Ctrl + F</Run> to open the Quick Search bar.<LineBreak/>
+                            • Type at least <Run>2 characters</Run> to start filtering.<LineBreak/>
+                            • The search has a smart delay (0.5s) to prevent lag while typing.<LineBreak/>
+                            • Only rows containing the search term (in Message or Thread) will be shown.<LineBreak/>
+                            • Matching text is automatically <Run>Highlighted in Yellow</Run>.
+                        </TextBlock>
+
+                        <TextBlock Text="Marking Rows" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • <Run>Spacebar:</Run> Select any row and press Space to Mark/Unmark it.<LineBreak/>
+                            • Marked rows are highlighted in <Run>Purple</Run>.<LineBreak/>
+                            • Use the <Run>⬆ / ⬇</Run> buttons in the top toolbar to jump between marked lines.
+                        </TextBlock>
+
+                        <TextBlock Text="Marked Lines Window" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • Click the <Run>📌 Marked Lines</Run> button to open a summary window.<LineBreak/>
+                            • Displays Time, Thread, and Message of all marked lines.<LineBreak/>
+                            • <Run>Double-Click:</Run> Jumps to the specific line in the main log.<LineBreak/>
+                            • <Run>Multi-Select:</Run> Use Ctrl/Shift to select multiple lines.<LineBreak/>
+                            • <Run>Copy (Ctrl+C):</Run> Copies selected lines to clipboard with clean formatting (aligned columns).<LineBreak/>
+                            • <Run>Select All (Ctrl+A):</Run> Selects all marked lines in the list.
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Filtering Logic">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="Time Focus Filter" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • Located in the <Run>Right-Click Menu</Run> of any log line.<LineBreak/>
+                            • Use the <Run>Slider</Run> in Settings to define the range (e.g., 10 sec).<LineBreak/>
+                            • Clicking "TIME FOCUS FILTER" will show ALL logs (from all threads) that occurred within +/- X seconds of the selected line.<LineBreak/>
+                            • Results are sorted Newest to Oldest.
+                        </TextBlock>
+
+                        <TextBlock Text="Advanced Filtering" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • <Run>Filter (Checkbox):</Run> Toggles positive filtering ON/OFF.<LineBreak/>
+                            • <Run>Filter Out (Checkbox):</Run> Toggles negative filtering (hiding rows) ON/OFF.<LineBreak/>
+                            • <Run>🔍 Filter... Button:</Run> Opens the Advanced Filter Editor to build complex logic trees (AND/OR groups, Regex, etc.).
+                        </TextBlock>
+
+                        <TextBlock Text="Thread Filtering" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • <Run>Header Filter (▼):</Run> Click the arrow in the 'Thread' column header to filter by specific threads.<LineBreak/>
+                            • Supports <Run>Multi-Select</Run>. Use the 'Clear' button in the pop-up to reset.<LineBreak/>
+                            • <Run>Filter Out Thread:</Run> Right-click a line -> 'Filter Out (Thread)...'. This hides ALL logs belonging to that thread name.
+                        </TextBlock>
+
+                        <TextBlock Text="Message Filtering" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • <Run>Filter Out (Message):</Run> Right-click a line -> 'Filter Out (Message)...'.<LineBreak/>
+                            • Allows you to hide rows containing a specific text string.<LineBreak/>
+                            • Useful for hiding spam or irrelevant errors.
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Coloring &amp; Configs">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="Custom Coloring" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • Click <Run>🎨 Color...</Run> to define highlighting rules.<LineBreak/>
+                            • You can color rows based on: Message content, Thread name, Level, or Logger.<LineBreak/>
+                            • Supports operators: Contains, Equals, Starts With, Ends With, and <Run>Regex</Run>.<LineBreak/>
+                            • Choose any custom color for each rule.
+                        </TextBlock>
+
+                        <TextBlock Text="Configuration Sets" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            The "CONFIGS" panel on the right allows you to manage your workspace:<LineBreak/>
+                            • <Run>Save:</Run> Saves current Coloring Rules + Advanced Filters to a JSON file.<LineBreak/>
+                            • <Run>Load:</Run> Imports a previously saved configuration.<LineBreak/>
+                            • <Run>Apply:</Run> Double-click a config in the list to apply it immediately.<LineBreak/>
+                            • <Run>Delete:</Run> Removes the selected config.
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+            <TabItem Header="Tools &amp; Live Mode">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Padding="10">
+                    <StackPanel>
+                        <TextBlock Text="External Tools" Style="{StaticResource HeaderStyle}"/>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="📈 Graph:" Width="80" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="Opens 'IoRecorderViewer.exe' (must be in app folder)." Margin="0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="🟦 JIRA:" Width="80" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="Opens the HP JIRA Dashboard in your browser." Margin="0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="🟧 Kibana:" Width="80" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="Quick link to Kibana logs interface." Margin="0"/>
+                        </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                            <TextBlock Text="📧 Mail:" Width="80" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+                            <TextBlock Text="Opens a new email in Outlook." Margin="0"/>
+                        </StackPanel>
+
+                        <TextBlock Text="Tab Explanations" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • <Run>Logs:</Run> The main view showing all loaded logs.<LineBreak/>
+                            • <Run>Logs (Filtered):</Run> Shows only the results of your active filters/search.<LineBreak/>
+                            • <Run>Events:</Run> Parsed CSV data showing system states and severity.<LineBreak/>
+                            • <Run>Screenshots:</Run> Viewer for loaded images. Use Ctrl + Mouse Wheel to Zoom.<LineBreak/>
+                            • <Run>Setup/Config:</Run> Read-only technical info about the machine state.
+                        </TextBlock>
+
+                        <TextBlock Text="Live Monitoring" Style="{StaticResource HeaderStyle}"/>
+                        <TextBlock>
+                            • To start, <Run>Drag &amp; Drop</Run> an active log file (or the 'no-sn.engineGroupA.file') into the window.<LineBreak/>
+                            • <Run>▶ Play:</Run> Resumes auto-scrolling and fetching new lines.<LineBreak/>
+                            • <Run>⏸ Pause:</Run> Stops fetching temporarily so you can inspect logs.<LineBreak/>
+                            • <Run>⊘ Clear:</Run> Wipes the screen and resets the buffer (starts fresh from now).<LineBreak/>
+                            • The app polls the file every 3 seconds for changes.
+                        </TextBlock>
+                    </StackPanel>
+                </ScrollViewer>
+            </TabItem>
+
+        </TabControl>
+
+        <Button Grid.Row="1" Content="Close" Click="Close_Click" Style="{DynamicResource ModernBtn}" HorizontalAlignment="Right" Margin="10" Width="100"/>
+    </Grid>
+</Window>
