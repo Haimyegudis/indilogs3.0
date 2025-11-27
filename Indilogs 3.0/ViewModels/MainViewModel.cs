@@ -30,6 +30,8 @@ namespace IndiLogs_3._0.ViewModels
         private readonly LogFileService _logService;
         private readonly LogColoringService _coloringService;
         private StatesWindow _statesWindow;
+        private bool _isTimeFocusActive = false;
+        public ObservableCollection<string> TimeUnits { get; } = new ObservableCollection<string> { "Seconds", "Minutes" };
         private AnalysisReportWindow _analysisWindow;
         public ObservableCollection<LogSessionData> LoadedSessions { get; set; }
         private LogSessionData _selectedSession;
@@ -73,6 +75,12 @@ namespace IndiLogs_3._0.ViewModels
         {
             get => _isBold;
             set { if (_isBold != value) { _isBold = value; OnPropertyChanged(); UpdateContentFontWeight(value); } }
+        }
+        private string _selectedTimeUnit = "Seconds";
+        public string SelectedTimeUnit
+        {
+            get => _selectedTimeUnit;
+            set { _selectedTimeUnit = value; OnPropertyChanged(); }
         }
         private void SwitchToSession(LogSessionData session)
         {
@@ -152,43 +160,38 @@ namespace IndiLogs_3._0.ViewModels
                     // אם אין זמן סיום, לוקחים עד הסוף
                     DateTime end = state.EndTime ?? DateTime.MaxValue;
 
-                    // שלב 1: שליפת *כל* הלוגים בטווח הזמן (ללא שום סינון תוכן)
-                    // זה ילך לטאב הראשי (Logs)
+                    // שלב 1: שליפת כל הלוגים בטווח הזמן של הסטייט
                     var rawTimeSlice = _allLogsCache
                         .Where(l => l.Date >= start && l.Date <= end)
                         .ToList();
 
-                    // שלב 2: הפעלת "הפילטר הדיפולטי" על הטווח הזה
-                    // זה ילך לטאב המשני (Logs Filtered)
+                    // שלב 2: חישוב הלוגים לטאב "Filtered Logs" (סינון דיפולטי)
                     var smartFiltered = rawTimeSlice
                         .Where(l => IsDefaultLog(l))
                         .ToList();
 
                     Application.Current.Dispatcher.Invoke(() =>
                     {
-                        // עדכון ה-Cache למקרה שנרצה לעשות חיפוש נוסף בתוך הטווח
+                        // עדכון ה-Cache כדי שמנגנון הפילטר הראשי ישתמש בו
                         _lastFilteredCache = rawTimeSlice;
 
-                        // --- איפוס פילטרים ידניים כדי לא להסתיר מידע בטאב הראשי ---
-                        _savedFilterRoot = null;
-                        _activeThreadFilters.Clear();
-                        _negativeFilters.Clear();
-                        IsFilterOutActive = false;
-
-                        // אנחנו מכבים את הדגל IsFilterActive כי אנחנו מציגים "הכל" (בטווח הזמן) בטאב הראשי
-                        // (או שמשאירים דלוק אבל מוודאים ש-Logs מכיל את המידע הגולמי)
-                        IsFilterActive = false;
-
-                        // עדכון הטאב הראשי - מציג הכל!
-                        Logs = rawTimeSlice;
-
-                        // עדכון הטאב המסונן - מציג רק את החשובים!
+                        // עדכון הטאב המשני (Logs Filtered)
                         if (FilteredLogs != null)
                         {
                             FilteredLogs.ReplaceAll(smartFiltered);
                         }
 
-                        StatusMessage = $"State: {state.StateName} | Showing {rawTimeSlice.Count} logs (Raw)";
+                        // --- כאן השינוי הגדול ---
+                        // איפוס פילטר מתקדם (כי אנחנו בפוקוס זמן)
+                        _savedFilterRoot = null;
+
+                        // סימון שאנחנו במצב של פוקוס זמן/סטייט (כדי ש-ToggleFilterView ידע להשתמש ב-Cache)
+                        _isTimeFocusActive = true;
+
+                        // הדלקת הצ'קבוקס - זה יפעיל אוטומטית את ToggleFilterView(true)
+                        IsFilterActive = true;
+
+                        StatusMessage = $"State: {state.StateName} | Showing {rawTimeSlice.Count} logs";
                         IsBusy = false;
                     });
                 });
@@ -255,32 +258,47 @@ namespace IndiLogs_3._0.ViewModels
         }
         private void OpenStatesWindow(object obj)
         {
-            // בדיקה 1: האם החלון כבר פתוח?
+            // 1. בדיקה אם החלון כבר פתוח - רק להביא לפוקוס
             if (_statesWindow != null && _statesWindow.IsVisible)
             {
-                _statesWindow.Activate(); // הבא לפוקוס
+                _statesWindow.Activate();
                 if (_statesWindow.WindowState == WindowState.Minimized)
                     _statesWindow.WindowState = WindowState.Normal;
-                return; // יציאה - לא פותחים חלון חדש ולא מריצים ניתוח מחדש
+                return;
             }
 
-            if (_allLogsCache == null || !_allLogsCache.Any())
+            // 2. בדיקה שיש סשן ולוגים
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
             {
                 MessageBox.Show("No logs loaded.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
             }
 
+            // 3. === בדיקת Cache: האם כבר חישבנו סטייטים לקובץ הזה? ===
+            if (SelectedSession.CachedStates != null && SelectedSession.CachedStates.Count > 0)
+            {
+                // פתיחה מיידית של החלון עם הנתונים השמורים
+                _statesWindow = new StatesWindow(SelectedSession.CachedStates, this);
+                _statesWindow.Owner = Application.Current.MainWindow; // קיבוע לחלון הראשי
+                _statesWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner; // פתיחה במרכז
+                _statesWindow.Closed += (s, e) => _statesWindow = null;
+                _statesWindow.Show();
+                return;
+            }
+
+            // 4. אם אין Cache, מתחילים חישוב
             IsBusy = true;
             StatusMessage = "Analyzing States...";
 
+            // העתקת רשימת הלוגים לשימוש ב-Task (למניעת בעיות גישה בין Threads)
+            var logsToProcess = SelectedSession.Logs.ToList();
+
             Task.Run(() =>
             {
-                // --- (לוגיקת הניתוח נשארת זהה לחלוטין - העתקתי אותה לנוחותך) ---
                 var statesList = new List<StateEntry>();
-                var sortedAllLogs = _allLogsCache.OrderBy(l => l.Date).ToList();
-                DateTime logEndLimit = sortedAllLogs.Last().Date;
 
-                var transitionLogs = _allLogsCache
+                // סינון רק לוגים רלוונטיים של מעברי סטייט
+                var transitionLogs = logsToProcess
                     .Where(l => l.ThreadName != null &&
                                 l.ThreadName.Equals("Manager", StringComparison.OrdinalIgnoreCase) &&
                                 l.Message != null &&
@@ -295,11 +313,14 @@ namespace IndiLogs_3._0.ViewModels
                     {
                         IsBusy = false;
                         StatusMessage = "Ready";
-                        MessageBox.Show("No state transitions found.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                        MessageBox.Show("No state transitions found in this log.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
                     });
                     return;
                 }
 
+                DateTime logEndLimit = logsToProcess.Last().Date;
+
+                // לולאת הניתוח
                 for (int i = 0; i < transitionLogs.Count; i++)
                 {
                     var currentLog = transitionLogs[i];
@@ -319,15 +340,18 @@ namespace IndiLogs_3._0.ViewModels
                         StatusColor = Brushes.Gray
                     };
 
+                    // חישוב זמן סיום (הלוג הבא הוא הסוף של הנוכחי)
                     if (i < transitionLogs.Count - 1)
                     {
                         var nextLog = transitionLogs[i + 1];
                         entry.EndTime = nextLog.Date;
 
+                        // בדיקות לוגיות להצלחה/כישלון (GetReady / MechInit)
                         var nextParts = nextLog.Message.Split(new[] { "->" }, StringSplitOptions.None);
                         if (nextParts.Length >= 2)
                         {
                             string nextDestination = nextParts[1].Trim();
+
                             if (entry.StateName.Equals("GET_READY", StringComparison.OrdinalIgnoreCase) ||
                                 entry.StateName.Equals("GR", StringComparison.OrdinalIgnoreCase))
                             {
@@ -345,25 +369,33 @@ namespace IndiLogs_3._0.ViewModels
                     }
                     else
                     {
+                        // הסטייט האחרון בלוג
                         entry.EndTime = logEndLimit;
                         entry.Status = "Current";
                     }
                     statesList.Add(entry);
                 }
 
+                // מיון הסופי (מהחדש לישן או ההפך, לבחירתך. כאן זה מהחדש לישן לתצוגה נוחה)
                 var displayList = statesList.OrderByDescending(s => s.StartTime).ToList();
 
+                // חזרה ל-UI Thread
                 Application.Current.Dispatcher.Invoke(() =>
                 {
                     IsBusy = false;
                     StatusMessage = "Ready";
 
-                    // יצירת החלון ושמירת הרפרנס
+                    // שמירה ב-Cache של הסשן הנוכחי
+                    if (SelectedSession != null)
+                    {
+                        SelectedSession.CachedStates = displayList;
+                    }
+
+                    // יצירת החלון והצגתו
                     _statesWindow = new StatesWindow(displayList, this);
-
-                    // ברגע שהחלון נסגר - מאפסים את המשתנה כדי שבפעם הבאה יפתח חדש
+                    _statesWindow.Owner = Application.Current.MainWindow; // קיבוע לחלון הראשי
+                    _statesWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner; // פתיחה במרכז
                     _statesWindow.Closed += (s, e) => _statesWindow = null;
-
                     _statesWindow.Show();
                 });
             });
@@ -681,9 +713,13 @@ namespace IndiLogs_3._0.ViewModels
             if (SelectedLog == null) return;
 
             IsBusy = true;
-            double rangeInSeconds = ContextSeconds;
 
-            StatusMessage = $"Applying Focus Time (+/- {rangeInSeconds}s)...";
+            // חישוב הטווח בשניות בהתאם ליחידה שנבחרה
+            double multiplier = SelectedTimeUnit == "Minutes" ? 60 : 1;
+            double rangeInSeconds = ContextSeconds * multiplier;
+
+            string unitLabel = SelectedTimeUnit == "Minutes" ? "min" : "sec";
+            StatusMessage = $"Applying Focus Time (+/- {ContextSeconds} {unitLabel})...";
 
             DateTime targetTime = SelectedLog.Date;
             DateTime start = targetTime.AddSeconds(-rangeInSeconds);
@@ -691,7 +727,6 @@ namespace IndiLogs_3._0.ViewModels
 
             Task.Run(() =>
             {
-                // סינון לפי זמן + מיון יורד
                 var contextLogs = _allLogsCache.Where(l =>
                     l.Date >= start &&
                     l.Date <= end
@@ -699,16 +734,13 @@ namespace IndiLogs_3._0.ViewModels
 
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // עדכון המאגר המסונן
                     _lastFilteredCache = contextLogs;
 
-                    // חשוב: איפוס פילטר מתקדם כדי שהתוכנה תדע להשתמש ב-_lastFilteredCache
+                    // איפוס פילטר מתקדם והדלקת דגל Time Focus
                     _savedFilterRoot = null;
+                    _isTimeFocusActive = true;
 
-                    // הפעלת הפילטר
                     IsFilterActive = true;
-
-                    // קריאה לפונקציית התצוגה
                     ToggleFilterView(true);
 
                     StatusMessage = $"Focus Time: +/- {rangeInSeconds}s | {contextLogs.Count} logs shown";
@@ -748,6 +780,7 @@ namespace IndiLogs_3._0.ViewModels
 
         private void ClearLogs(object obj)
         {
+            _isTimeFocusActive = false;
             if (_allLogsCache != null) _allLogsCache.Clear();
             _lastFilteredCache.Clear();
             _negativeFilters.Clear();
@@ -773,14 +806,19 @@ namespace IndiLogs_3._0.ViewModels
 
         private void OpenMarkedLogsWindow(object obj)
         {
-            if (_markedLogsWindow == null)
+            // בדיקה אם החלון קיים (למקרה נדיר שהוא פתוח ולא סגור)
+            if (_markedLogsWindow != null && _markedLogsWindow.IsVisible)
             {
-                _markedLogsWindow = new MarkedLogsWindow { DataContext = this };
-                _markedLogsWindow.Closed += (s, e) => _markedLogsWindow = null;
+                _markedLogsWindow.Activate();
+                return;
             }
 
-            if (_markedLogsWindow.IsVisible) _markedLogsWindow.Hide();
-            else { _markedLogsWindow.Show(); _markedLogsWindow.Activate(); }
+            // יצירה מחדש - מבטיח מיקום נכון בכל פעם
+            _markedLogsWindow = new MarkedLogsWindow { DataContext = this };
+            _markedLogsWindow.Owner = Application.Current.MainWindow; // נדבק לחלון הראשי
+            _markedLogsWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner; // מתמרכז אליו
+            _markedLogsWindow.Closed += (s, e) => _markedLogsWindow = null; // איפוס המשתנה בסגירה
+            _markedLogsWindow.Show();
         }
 
         private async void ProcessFiles(string[] filePaths)
@@ -1042,15 +1080,52 @@ namespace IndiLogs_3._0.ViewModels
         private void OpenSettingsWindow(object obj)
         {
             var win = new SettingsWindow { DataContext = this };
+
+            // הגדרה קריטית: משייך את החלון לחלון הראשי כדי שלא ייעלם מאחוריו
+            if (Application.Current.MainWindow != null && Application.Current.MainWindow != win)
+            {
+                win.Owner = Application.Current.MainWindow;
+            }
+
+            bool positioned = false;
+
             if (obj is FrameworkElement element)
             {
-                Point point = element.PointToScreen(new Point(0, 0));
-                win.Left = point.X;
-                win.Top = point.Y + element.ActualHeight;
+                try
+                {
+                    // חישוב המיקום הפיזי על המסך
+                    Point point = element.PointToScreen(new Point(0, 0));
+
+                    // המרה מפיקסלים פיזיים ליחידות לוגיות (WPF Units) - תיקון למסכים עם Scaling
+                    var source = PresentationSource.FromVisual(element);
+                    if (source != null && source.CompositionTarget != null)
+                    {
+                        var transform = source.CompositionTarget.TransformFromDevice;
+                        var corner = transform.Transform(point);
+
+                        win.Left = corner.X - 150; // הזזה קטנה שמאלה כדי שהחלון לא יברח מהמסך
+                        win.Top = corner.Y + element.ActualHeight + 5;
+                        positioned = true;
+                    }
+                }
+                catch
+                {
+                    // אם החישוב נכשל, לא נורא - נפתח במרכז
+                }
             }
+
+            // אם לא הצלחנו למקם (או שהכפתור לא נשלח), נפתח במרכז המסך של האפליקציה
+            if (!positioned)
+            {
+                win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
+            // וידוא שהחלון לא יוצא מגבולות המסך (במקרה של הזזה ידנית)
+            if (win.Left < 0) win.Left = 0;
+            if (win.Top < 0) win.Top = 0;
+
             win.Show();
         }
-
         private void OpenFontsWindow(object obj) { new FontsWindow { DataContext = this }.ShowDialog(); }
 
         private void UpdateContentFont(string fontName) { if (!string.IsNullOrEmpty(fontName) && Application.Current != null) UpdateResource(Application.Current.Resources, "ContentFontFamily", new FontFamily(fontName)); }
@@ -1068,29 +1143,27 @@ namespace IndiLogs_3._0.ViewModels
 
             if (show)
             {
-                // בדיקה האם מוגדר פילטר מתקדם (עץ תנאים)
+                // בדיקה: האם יש פילטר מתקדם פעיל?
                 bool hasAdvancedFilter = _savedFilterRoot != null &&
                                          _savedFilterRoot.Children != null &&
                                          _savedFilterRoot.Children.Count > 0;
 
-                if (hasAdvancedFilter)
+                // === התיקון: מכבדים את התוצאות השמורות גם אם זה Advanced Filter וגם אם זה Time Focus ===
+                if (hasAdvancedFilter || _isTimeFocusActive)
                 {
-                    // אם יש פילטר מתקדם, משתמשים בתוצאות שלו (גם אם הרשימה ריקה!)
                     currentLogs = _lastFilteredCache ?? new List<LogEntry>();
                 }
                 else
                 {
-                    // אחרת, מתחילים עם כל הלוגים של הסשן הנוכחי
                     currentLogs = _allLogsCache;
                 }
 
-                // שילוב עם פילטר Threads (חיתוך - AND)
+                // ... המשך הפונקציה נשאר זהה ...
                 if (_activeThreadFilters.Any())
                 {
                     currentLogs = currentLogs.Where(l => _activeThreadFilters.Contains(l.ThreadName));
                 }
 
-                // שילוב עם חיפוש מהיר (Quick Search)
                 if (!string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2)
                 {
                     currentLogs = currentLogs.Where(l =>
@@ -1101,11 +1174,10 @@ namespace IndiLogs_3._0.ViewModels
             }
             else
             {
-                // אם הפילטר הראשי כבוי - מראים את כל הלוגים
                 currentLogs = _allLogsCache;
             }
 
-            // --- Filter Out (שלילי) - רץ תמיד אם הצ'קבוקס דלוק ---
+            // --- Filter Out (רץ תמיד) ---
             if (IsFilterOutActive && _negativeFilters.Any())
             {
                 currentLogs = currentLogs.Where(l =>
@@ -1115,12 +1187,10 @@ namespace IndiLogs_3._0.ViewModels
                         if (f.StartsWith("THREAD:"))
                         {
                             string threadPart = f.Substring(7);
-                            // אם ה-Thread תואם לפילטר השלילי -> הסתר את השורה
                             if (l.ThreadName != null && l.ThreadName.IndexOf(threadPart, StringComparison.OrdinalIgnoreCase) >= 0) return false;
                         }
                         else
                         {
-                            // אם ההודעה מכילה את הטקסט -> הסתר את השורה
                             if (l.Message != null && l.Message.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0) return false;
                         }
                     }
@@ -1128,7 +1198,6 @@ namespace IndiLogs_3._0.ViewModels
                 });
             }
 
-            // עדכון ה-UI
             Logs = currentLogs.ToList();
         }
         private void FilterOut(object p)
@@ -1153,6 +1222,10 @@ namespace IndiLogs_3._0.ViewModels
 
             if (win.ShowDialog() == true && !string.IsNullOrWhiteSpace(win.TextToRemove))
             {
+                // --- מחיקת השורות הבעייתיות ---
+                // _savedFilterRoot = ... <-- זה לא רלוונטי כאן, זה שייך לפילטר המתקדם
+                // _isTimeFocusActive = false; <-- לא חובה לאפס את זה בפילטר שלילי, הוא יכול לעבוד מעל TimeFocus
+
                 string threadToHide = win.TextToRemove;
                 string filterKey = "THREAD:" + threadToHide; // קידומת מזהה
 
@@ -1160,7 +1233,7 @@ namespace IndiLogs_3._0.ViewModels
                 {
                     _negativeFilters.Add(filterKey);
                     IsFilterOutActive = true; // מדליק את הצ'קבוקס
-                    ToggleFilterView(IsFilterActive);
+                    ToggleFilterView(IsFilterActive); // רענון התצוגה
                 }
             }
         }
@@ -1380,25 +1453,41 @@ namespace IndiLogs_3._0.ViewModels
             if (parameter is SavedConfiguration c)
             {
                 IsBusy = true;
+                StatusMessage = $"Applying config: {c.Name}...";
+
+                // 1. החלת חוקי צביעה
                 if (c.ColoringRules != null)
                 {
                     _savedColoringRules = c.ColoringRules;
                     await _coloringService.ApplyDefaultColorsAsync(_allLogsCache);
                     await _coloringService.ApplyCustomColoringAsync(_allLogsCache, c.ColoringRules);
+
+                    // רענון התצוגה לצבעים
+                    if (Logs != null)
+                        foreach (var log in Logs) log.OnPropertyChanged("RowBackground");
                 }
+
+                // 2. החלת פילטרים
                 if (c.FilterRoot != null)
                 {
                     _savedFilterRoot = c.FilterRoot;
+
+                    // חישוב התוצאות של הפילטר השמור
                     var res = await Task.Run(() => _allLogsCache.Where(l => EvaluateFilterNode(l, c.FilterRoot)).ToList());
+
                     _lastFilteredCache = res;
-                    _isFilterActive = true;
-                    OnPropertyChanged(nameof(IsFilterActive));
-                    ToggleFilterView(true);
+
+                    // אנחנו לא בפוקוס זמן אלא בפילטר מתקדם
+                    _isTimeFocusActive = false;
+
+                    // הדלקת הצ'קבוקס (מפעיל את ToggleFilterView)
+                    IsFilterActive = true;
                 }
+
                 IsBusy = false;
+                StatusMessage = "Configuration applied.";
             }
         }
-
         private void RemoveConfiguration(object parameter)
         {
             var configToDelete = SelectedConfig;
