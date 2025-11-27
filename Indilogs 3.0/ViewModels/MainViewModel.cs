@@ -1066,18 +1066,46 @@ namespace IndiLogs_3._0.ViewModels
         {
             IEnumerable<LogEntry> currentLogs;
 
-            // ... (חלק 1 וחלק 2 של הפונקציה נשארים ללא שינוי - העתק מהקוד הקודם) ...
-            // חלק 1: סינון חיובי...
             if (show)
             {
-                if (_lastFilteredCache != null && _lastFilteredCache.Count > 0) currentLogs = _lastFilteredCache;
-                else currentLogs = _allLogsCache;
+                // בדיקה האם מוגדר פילטר מתקדם (עץ תנאים)
+                bool hasAdvancedFilter = _savedFilterRoot != null &&
+                                         _savedFilterRoot.Children != null &&
+                                         _savedFilterRoot.Children.Count > 0;
 
-                if (_activeThreadFilters.Any()) currentLogs = currentLogs.Where(l => _activeThreadFilters.Contains(l.ThreadName));
+                if (hasAdvancedFilter)
+                {
+                    // אם יש פילטר מתקדם, משתמשים בתוצאות שלו (גם אם הרשימה ריקה!)
+                    currentLogs = _lastFilteredCache ?? new List<LogEntry>();
+                }
+                else
+                {
+                    // אחרת, מתחילים עם כל הלוגים של הסשן הנוכחי
+                    currentLogs = _allLogsCache;
+                }
+
+                // שילוב עם פילטר Threads (חיתוך - AND)
+                if (_activeThreadFilters.Any())
+                {
+                    currentLogs = currentLogs.Where(l => _activeThreadFilters.Contains(l.ThreadName));
+                }
+
+                // שילוב עם חיפוש מהיר (Quick Search)
+                if (!string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2)
+                {
+                    currentLogs = currentLogs.Where(l =>
+                       (l.Message != null && l.Message.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
+                       (l.ThreadName != null && l.ThreadName.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                   );
+                }
             }
-            else currentLogs = _allLogsCache;
+            else
+            {
+                // אם הפילטר הראשי כבוי - מראים את כל הלוגים
+                currentLogs = _allLogsCache;
+            }
 
-            // חלק 2: סינון שלילי (Filter Out)...
+            // --- Filter Out (שלילי) - רץ תמיד אם הצ'קבוקס דלוק ---
             if (IsFilterOutActive && _negativeFilters.Any())
             {
                 currentLogs = currentLogs.Where(l =>
@@ -1087,10 +1115,12 @@ namespace IndiLogs_3._0.ViewModels
                         if (f.StartsWith("THREAD:"))
                         {
                             string threadPart = f.Substring(7);
+                            // אם ה-Thread תואם לפילטר השלילי -> הסתר את השורה
                             if (l.ThreadName != null && l.ThreadName.IndexOf(threadPart, StringComparison.OrdinalIgnoreCase) >= 0) return false;
                         }
                         else
                         {
+                            // אם ההודעה מכילה את הטקסט -> הסתר את השורה
                             if (l.Message != null && l.Message.IndexOf(f, StringComparison.OrdinalIgnoreCase) >= 0) return false;
                         }
                     }
@@ -1098,16 +1128,7 @@ namespace IndiLogs_3._0.ViewModels
                 });
             }
 
-            // --- חלק 3 המתוקן: Quick Search ---
-            if (!string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2)
-            {
-                currentLogs = currentLogs.Where(l =>
-                    // מחפש רק ב-Message וב-ThreadName (כי העפנו את Logger)
-                    (l.Message != null && l.Message.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                    (l.ThreadName != null && l.ThreadName.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0)
-                );
-            }
-
+            // עדכון ה-UI
             Logs = currentLogs.ToList();
         }
         private void FilterOut(object p)
@@ -1238,36 +1259,103 @@ namespace IndiLogs_3._0.ViewModels
 
         private bool EvaluateFilterNode(LogEntry log, FilterNode node)
         {
+            // הגנה מפני קריסה
             if (node == null) return true;
+
+            // =========================================================
+            // מקרה 1: בדיקת תנאי בודד (עלה בעץ - Condition)
+            // =========================================================
             if (node.Type == NodeType.Condition)
             {
                 string val = "";
-                if (node.Field == "Level") val = log.Level;
-                else if (node.Field == "ThreadName") val = log.ThreadName;
-                else if (node.Field == "Logger") val = log.Logger;
-                else val = log.Message;
+
+                // שליפת הערך מהלוג לפי השדה שנבחר
+                switch (node.Field)
+                {
+                    case "Level": val = log.Level; break;
+                    case "ThreadName": val = log.ThreadName; break;
+                    case "Logger": val = log.Logger; break;
+                    case "ProcessName": val = log.ProcessName; break;
+                    default: val = log.Message; break; // ברירת מחדל: Message
+                }
 
                 if (string.IsNullOrEmpty(val)) return false;
 
-                if (node.Operator == "Equals") return val.Equals(node.Value, StringComparison.OrdinalIgnoreCase);
-                if (node.Operator == "Begins With") return val.StartsWith(node.Value, StringComparison.OrdinalIgnoreCase);
-                if (node.Operator == "Ends With") return val.EndsWith(node.Value, StringComparison.OrdinalIgnoreCase);
-                if (node.Operator == "Regex") { try { return Regex.IsMatch(val, node.Value, RegexOptions.IgnoreCase); } catch { return false; } }
+                string op = node.Operator;       // למשל: Contains
+                string criteria = node.Value;    // למשל: "Error"
 
-                return val.IndexOf(node.Value, StringComparison.OrdinalIgnoreCase) >= 0;
+                // ביצוע ההשוואה
+                if (op == "Equals") return val.Equals(criteria, StringComparison.OrdinalIgnoreCase);
+                if (op == "Begins With") return val.StartsWith(criteria, StringComparison.OrdinalIgnoreCase);
+                if (op == "Ends With") return val.EndsWith(criteria, StringComparison.OrdinalIgnoreCase);
+                if (op == "Regex")
+                {
+                    try { return System.Text.RegularExpressions.Regex.IsMatch(val, criteria, System.Text.RegularExpressions.RegexOptions.IgnoreCase); }
+                    catch { return false; }
+                }
+                // ברירת מחדל: Contains
+                return val.IndexOf(criteria, StringComparison.OrdinalIgnoreCase) >= 0;
             }
+
+            // =========================================================
+            // מקרה 2: בדיקת קבוצה (Group) - רקורסיה
+            // =========================================================
             else
             {
-                if (node.Children.Count == 0) return true;
-                bool isAnd = node.LogicalOperator.Contains("AND");
-                bool isNot = node.LogicalOperator.Contains("NOT");
-                bool result = isAnd;
-                foreach (var child in node.Children)
+                // קבוצה ריקה:
+                // אם זה AND, מחזירים True (כי אין משהו שיכשיל).
+                // אם זה OR, מחזירים False (כי אין משהו שיקיים).
+                // אבל כדי לא להסתיר לוגים סתם, נהוג שקבוצה ריקה היא "שקופה" (True).
+                if (node.Children == null || node.Children.Count == 0) return true;
+
+                string op = node.LogicalOperator; // AND, OR, NOT AND, NOT OR
+
+                // שלב א': זיהוי לוגיקת הבסיס (האם אנחנו בודקים "כולם" או "אחד")
+                // "NOT AND" מתבסס על לוגיקה של AND (שמוכחשת בסוף)
+                // "NOT OR" מתבסס על לוגיקה של OR (שמוכחשת בסוף)
+
+                bool isBaseOr = op.Contains("OR"); // תופס גם את "OR" וגם את "NOT OR"
+                bool baseResult;
+
+                if (isBaseOr)
                 {
-                    bool childRes = EvaluateFilterNode(log, child);
-                    if (isAnd) result &= childRes; else result |= childRes;
+                    // --- לוגיקת OR בסיסית ---
+                    // מספיק שילד אחד יחזיר True כדי שהבסיס יהיה True.
+                    baseResult = false;
+                    foreach (var child in node.Children)
+                    {
+                        // קריאה רקורסיבית! (בודק גם קבוצות בתוך קבוצות)
+                        if (EvaluateFilterNode(log, child))
+                        {
+                            baseResult = true;
+                            break; // מצאנו אחד נכון, לא צריך להמשיך לבדוק
+                        }
+                    }
                 }
-                return isNot ? !result : result;
+                else
+                {
+                    // --- לוגיקת AND בסיסית --- (תופס גם AND וגם NOT AND)
+                    // מספיק שילד אחד יחזיר False כדי שהבסיס יהיה False.
+                    baseResult = true;
+                    foreach (var child in node.Children)
+                    {
+                        // קריאה רקורסיבית!
+                        if (!EvaluateFilterNode(log, child))
+                        {
+                            baseResult = false;
+                            break; // מצאנו אחד שגוי, ה-AND נכשל
+                        }
+                    }
+                }
+
+                // שלב ב': בדיקת היפוך (NOT)
+                // אם האופרטור הוא NOT AND או NOT OR, הופכים את התוצאה
+                if (op.StartsWith("NOT"))
+                {
+                    return !baseResult;
+                }
+
+                return baseResult;
             }
         }
 

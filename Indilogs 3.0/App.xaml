@@ -73,6 +73,24 @@
             <Setter Property="Background" Value="{Binding RowBackground}" />
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}" />
             <Setter Property="BorderThickness" Value="0"/>
+
+            <Setter Property="ToolTipService.InitialShowDelay" Value="1500"/>
+            <Setter Property="ToolTipService.ShowDuration" Value="20000"/>
+            <Setter Property="ToolTip">
+                <Setter.Value>
+                    <ToolTip Background="{DynamicResource BgCard}" 
+                     BorderBrush="{DynamicResource BorderColor}" 
+                     Foreground="{DynamicResource TextPrimary}">
+                        <StackPanel MaxWidth="600">
+                            <TextBlock Text="{Binding Date, StringFormat='Time: yyyy-MM-dd HH:mm:ss.fff'}" FontWeight="Bold" Margin="0,0,0,5"/>
+                            <TextBlock Text="{Binding ThreadName, StringFormat='Thread: {0}'}" Foreground="{DynamicResource PrimaryColor}" Margin="0,0,0,5"/>
+                            <Separator Background="{DynamicResource BorderColor}" Margin="0,0,0,5"/>
+                            <TextBlock Text="{Binding Message}" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </ToolTip>
+                </Setter.Value>
+            </Setter>
+
             <Style.Triggers>
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="#203B82F6"/>
