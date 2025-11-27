@@ -31,6 +31,21 @@ namespace IndiLogs_3._0.ViewModels
         private readonly LogColoringService _coloringService;
         private StatesWindow _statesWindow;
         private AnalysisReportWindow _analysisWindow;
+        public ObservableCollection<LogSessionData> LoadedSessions { get; set; }
+        private LogSessionData _selectedSession;
+        public LogSessionData SelectedSession
+        {
+            get => _selectedSession;
+            set
+            {
+                if (_selectedSession != value)
+                {
+                    _selectedSession = value;
+                    OnPropertyChanged();
+                    SwitchToSession(_selectedSession); // פונקציה חדשה שנטמיע מיד
+                }
+            }
+        }
         // --- Live Monitoring Variables ---
         private CancellationTokenSource _liveCts;
         private string _liveFilePath;
@@ -59,7 +74,57 @@ namespace IndiLogs_3._0.ViewModels
             get => _isBold;
             set { if (_isBold != value) { _isBold = value; OnPropertyChanged(); UpdateContentFontWeight(value); } }
         }
+        private void SwitchToSession(LogSessionData session)
+        {
+            if (session == null) return;
 
+            IsBusy = true;
+
+            // 1. עדכון המקור הראשי (עבור פילטרים עתידיים)
+            _allLogsCache = session.Logs;
+
+            // עדכון הטאב הראשי (Logs)
+            Logs = session.Logs;
+
+            // 2. === התיקון: הפעלת הפילטר הדיפולטי עבור הטאב LOGS FILTERED ===
+            // אנו משתמשים בפונקציה הקיימת IsDefaultLog כדי לסנן את הלוגים החשובים
+            var defaultFilteredLogs = session.Logs.Where(l => IsDefaultLog(l)).ToList();
+
+            // דחיפת התוצאות לרשימה המוצגת ב-UI
+            FilteredLogs.ReplaceAll(defaultFilteredLogs);
+
+            // (אופציונלי) אם אתה רוצה שהלוג הראשון ייבחר אוטומטית
+            if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0];
+
+            // 3. עדכון שאר הנתונים (Events, Screenshots)
+            // המרה מ-List רגיל (שבסשן) ל-ObservableCollection (שה-UI צריך)
+            Events = new ObservableCollection<EventEntry>(session.Events);
+            OnPropertyChanged(nameof(Events));
+
+            Screenshots = new ObservableCollection<BitmapImage>(session.Screenshots);
+            OnPropertyChanged(nameof(Screenshots));
+
+            // 4. נתונים נלווים
+            MarkedLogs = session.MarkedLogs;
+            OnPropertyChanged(nameof(MarkedLogs));
+
+            SetupInfo = session.SetupInfo;
+            PressConfig = session.PressConfiguration;
+
+            // עדכון כותרת החלון
+            if (!string.IsNullOrEmpty(session.VersionsInfo))
+                WindowTitle = $"IndiLogs 3.0 - {session.FileName} ({session.VersionsInfo})";
+            else
+                WindowTitle = $"IndiLogs 3.0 - {session.FileName}";
+
+            // איפוס מצב חיפוש/פילטר ב-UI כדי למנוע בלבול
+            // (אלא אם כן תרצה לשמור את מילות החיפוש בין קבצים)
+            SearchText = "";
+            IsFilterActive = false;
+            IsFilterOutActive = false;
+
+            IsBusy = false;
+        }
         // --- Live Mode Properties ---
         private bool _isLiveMode;
         public bool IsLiveMode
@@ -437,6 +502,7 @@ namespace IndiLogs_3._0.ViewModels
             RunAnalysisCommand = new RelayCommand(RunAnalysis);
             _allLogsCache = new List<LogEntry>();
             Logs = new List<LogEntry>();
+            LoadedSessions = new ObservableCollection<LogSessionData>();
             FilteredLogs = new ObservableRangeCollection<LogEntry>();
             Events = new ObservableCollection<EventEntry>();
             Screenshots = new ObservableCollection<BitmapImage>();
@@ -508,7 +574,14 @@ namespace IndiLogs_3._0.ViewModels
         // --- TIME FOCUS FILTER ---
         private void RunAnalysis(object obj)
         {
-            // בדיקה: אם החלון כבר פתוח - הבא לפוקוס וצא
+            // 1. בדיקות תקינות
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
+            {
+                MessageBox.Show("No logs loaded to analyze.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            // 2. בדיקה אם החלון כבר פתוח
             if (_analysisWindow != null && _analysisWindow.IsVisible)
             {
                 _analysisWindow.Activate();
@@ -517,16 +590,20 @@ namespace IndiLogs_3._0.ViewModels
                 return;
             }
 
-            if (Logs == null || !Logs.Any())
+            // 3. === בדיקת Cache: האם כבר ניתחנו את הקובץ הזה? ===
+            if (SelectedSession.CachedAnalysis != null && SelectedSession.CachedAnalysis.Any())
             {
-                MessageBox.Show("No logs loaded to analyze.", "Debug Info", MessageBoxButton.OK, MessageBoxImage.Warning);
+                // פתיחה מיידית של החלון עם התוצאות השמורות
+                OpenAnalysisWindow(SelectedSession.CachedAnalysis);
                 return;
             }
 
+            // 4. אם אין תוצאות שמורות - מריצים ניתוח חדש
             IsBusy = true;
-            StatusMessage = "Initializing Analysis..."; // הודעה התחלתית
+            StatusMessage = "Initializing Analysis...";
 
-            var logsToAnalyze = Logs.ToList();
+            // מעתיקים את הלוגים לרשימה נפרדת כדי למנוע בעיות של גישה בין Threads
+            var logsToAnalyze = SelectedSession.Logs.ToList();
 
             Task.Run(() =>
             {
@@ -534,13 +611,13 @@ namespace IndiLogs_3._0.ViewModels
                 {
                     var allResults = new List<AnalysisResult>();
 
-                    // עדכון סטטוס למשתמש
+                    // הרצת Mechanit Analyzer
                     ReportProgress(10, "Running Mechanit Analyzer...");
                     var mechAnalyzer = new MechanitAnalyzer();
                     var mechResults = mechAnalyzer.Analyze(logsToAnalyze);
                     if (mechResults != null) allResults.AddRange(mechResults);
 
-                    // עדכון סטטוס למשתמש
+                    // הרצת GetReady Analyzer
                     ReportProgress(50, "Running GetReady Analyzer...");
                     var grAnalyzer = new GetReadyAnalyzer();
                     var grResults = grAnalyzer.Analyze(logsToAnalyze);
@@ -548,6 +625,7 @@ namespace IndiLogs_3._0.ViewModels
 
                     ReportProgress(90, "Finalizing Report...");
 
+                    // סיום וחזרה ל-UI Thread
                     Application.Current.Dispatcher.Invoke(() =>
                     {
                         IsBusy = false;
@@ -559,11 +637,14 @@ namespace IndiLogs_3._0.ViewModels
                         }
                         else
                         {
-                            // פתיחת החלון ושמירת הרפרנס
-                            _analysisWindow = new AnalysisReportWindow(allResults);
-                            _analysisWindow.Owner = Application.Current.MainWindow;
-                            _analysisWindow.Closed += (s, e) => _analysisWindow = null; // איפוס בסגירה
-                            _analysisWindow.Show();
+                            // === שמירת התוצאות ב-Cache של הסשן הנוכחי ===
+                            if (SelectedSession != null)
+                            {
+                                SelectedSession.CachedAnalysis = allResults;
+                            }
+
+                            // פתיחת החלון
+                            OpenAnalysisWindow(allResults);
                         }
                     });
                 }
@@ -578,8 +659,14 @@ namespace IndiLogs_3._0.ViewModels
             });
         }
 
-        // פונקציית עזר לעדכון מהיר של ה-UI מה-Thread המשני
-
+        // פונקציית עזר לפתיחת החלון (כדי למנוע שכפול קוד)
+        private void OpenAnalysisWindow(List<AnalysisResult> results)
+        {
+            _analysisWindow = new AnalysisReportWindow(results);
+            _analysisWindow.Owner = Application.Current.MainWindow;
+            _analysisWindow.Closed += (s, e) => _analysisWindow = null;
+            _analysisWindow.Show();
+        }
         // פונקציית עזר לעדכון מהיר של ה-UI מה-Thread המשני
         private void ReportProgress(double percent, string msg)
         {
@@ -673,6 +760,15 @@ namespace IndiLogs_3._0.ViewModels
             MarkedLogs.Clear();
             CurrentProgress = 0; SetupInfo = ""; PressConfig = ""; ScreenshotZoom = 400;
             IsFilterOutActive = false;
+            LoadedSessions.Clear();
+            SelectedSession = null;
+
+            // איפוס תצוגה
+            Logs = new List<LogEntry>();
+            FilteredLogs.Clear();
+            Events.Clear();
+            Screenshots.Clear();
+            MarkedLogs = new ObservableCollection<LogEntry>();
         }
 
         private void OpenMarkedLogsWindow(object obj)
@@ -689,63 +785,56 @@ namespace IndiLogs_3._0.ViewModels
 
         private async void ProcessFiles(string[] filePaths)
         {
-            StopLiveMonitoring();
-
-            // (בדיקת Live Mode נשארת אותו דבר...)
-            if (filePaths.Length == 1)
-            {
-                string fileName = Path.GetFileName(filePaths[0]);
-                if (fileName.StartsWith(LIVE_FILE_NAME, StringComparison.OrdinalIgnoreCase))
-                {
-                    LoadedFiles.Clear();
-                    LoadedFiles.Add(fileName);
-                    StartLiveMonitoring(filePaths[0]);
-                    return;
-                }
-            }
+            StopLiveMonitoring(); // אם היינו בלייב, עוצרים
 
             IsBusy = true;
-            CurrentProgress = 0;
-            StatusMessage = "Starting...";
-            ClearLogs(null);
+            StatusMessage = "Processing files...";
 
             try
             {
-                foreach (var f in filePaths) LoadedFiles.Add(Path.GetFileName(f));
+                // הערה: אנחנו *לא* קוראים ל-ClearLogs() כדי לא למחוק קבצים קודמים!
 
-                // --- השינוי כאן: Progress מקבל עכשיו (double, string) ---
                 var progress = new Progress<(double Percent, string Message)>(update =>
                 {
                     CurrentProgress = update.Percent;
                     StatusMessage = update.Message;
                 });
 
-                var session = await _logService.LoadSessionAsync(filePaths, progress);
+                // שימוש בשירות הטעינה הקיים
+                // שיפור קטן: LogFileService מחזיר סשן אחד מאוחד.
+                // אם המשתמש בחר כמה קבצים בבת אחת, נרצה אולי לטעון כל אחד בנפרד?
+                // הקוד הנוכחי שלך ב-Service מאחד הכל. אם תרצה להפריד, תצטרך לולאה כאן.
+                // נניח כרגע שכל הטעינה היא "סשן אחד" (כמו ZIP או קבוצת לוגים קשורה).
 
-                // שאר הקוד נשאר זהה...
-                _allLogsCache = session.Logs;
-                _isFilterActive = false;
-                OnPropertyChanged(nameof(IsFilterActive));
+                var newSession = await _logService.LoadSessionAsync(filePaths, progress);
 
-                if (!string.IsNullOrEmpty(session.VersionsInfo)) WindowTitle = $"IndiLogs 3.0 - {session.VersionsInfo}";
+                // הגדרת שם לסשן (שם הקובץ הראשון או שם ה-ZIP)
+                newSession.FileName = System.IO.Path.GetFileName(filePaths[0]);
+                if (filePaths.Length > 1) newSession.FileName += $" (+{filePaths.Length - 1})";
+                newSession.FilePath = filePaths[0];
 
+                // החלת צבעים (חשוב לעשות את זה לפני ההוספה)
                 StatusMessage = "Applying Colors...";
-                await _coloringService.ApplyDefaultColorsAsync(session.Logs);
+                await _coloringService.ApplyDefaultColorsAsync(newSession.Logs);
 
-                var def = _allLogsCache.Where(l => IsDefaultLog(l)).ToList();
-                FilteredLogs.ReplaceAll(def);
+                // הוספה לרשימה בצד שמאל
+                LoadedSessions.Add(newSession);
+
+                // מעבר אוטומטי לקובץ החדש שנטען
+                SelectedSession = newSession;
 
                 CurrentProgress = 100;
                 StatusMessage = "Ready";
-                Logs = _allLogsCache;
-
-                foreach (var e in session.Events) Events.Add(e);
-                foreach (var s in session.Screenshots) Screenshots.Add(s);
-                SetupInfo = session.SetupInfo ?? "";
-                PressConfig = session.PressConfiguration ?? "";
             }
-            catch (Exception ex) { StatusMessage = $"Error: {ex.Message}"; }
-            finally { IsBusy = false; }
+            catch (Exception ex)
+            {
+                StatusMessage = $"Error: {ex.Message}";
+                MessageBox.Show($"Error loading files: {ex.Message}");
+            }
+            finally
+            {
+                IsBusy = false;
+            }
         }
 
         private void StartLiveMonitoring(string path)
