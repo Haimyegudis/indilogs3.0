@@ -26,14 +26,17 @@ namespace IndiLogs_3._0.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
+     
         // --- Services ---
         private readonly LogFileService _logService;
         private readonly LogColoringService _coloringService;
         private StatesWindow _statesWindow;
         private bool _isTimeFocusActive = false;
+        private readonly CsvExportService _csvService;
         public ObservableCollection<string> TimeUnits { get; } = new ObservableCollection<string> { "Seconds", "Minutes" };
         private AnalysisReportWindow _analysisWindow;
         public ObservableCollection<LogSessionData> LoadedSessions { get; set; }
+        public ICommand ExportParsedDataCommand { get; }
         private LogSessionData _selectedSession;
         public LogSessionData SelectedSession
         {
@@ -235,7 +238,8 @@ namespace IndiLogs_3._0.ViewModels
                     _searchText = value;
                     OnPropertyChanged();
 
-                    // במקום לפלטר מיד - מאתחלים את הטיימר
+                    // בכל הקלדת אות: עוצרים את הטיימר ומפעילים מחדש
+                    // זה יוצר את ההשהייה (Debounce)
                     _searchDebounceTimer.Stop();
                     _searchDebounceTimer.Start();
                 }
@@ -529,6 +533,7 @@ namespace IndiLogs_3._0.ViewModels
 
         public MainViewModel()
         {
+            _csvService = new CsvExportService(); // אתחול השירות
             _logService = new LogFileService();
             _coloringService = new LogColoringService();
             RunAnalysisCommand = new RelayCommand(RunAnalysis);
@@ -584,6 +589,7 @@ namespace IndiLogs_3._0.ViewModels
             OpenSettingsCommand = new RelayCommand(OpenSettingsWindow);
             OpenFontsWindowCommand = new RelayCommand(OpenFontsWindow);
             OpenMarkedLogsWindowCommand = new RelayCommand(OpenMarkedLogsWindow);
+            ExportParsedDataCommand = new RelayCommand(ExportParsedData);
 
             ZoomInCommand = new RelayCommand(o => { if (SelectedTabIndex == 3) ScreenshotZoom = Math.Min(5000, ScreenshotZoom + 100); else GridFontSize = Math.Min(30, GridFontSize + 1); });
             ZoomOutCommand = new RelayCommand(o => { if (SelectedTabIndex == 3) ScreenshotZoom = Math.Max(100, ScreenshotZoom - 100); else GridFontSize = Math.Max(8, GridFontSize - 1); });
@@ -600,7 +606,23 @@ namespace IndiLogs_3._0.ViewModels
             _searchDebounceTimer.Stop(); // עוצר את הטיימר
             ToggleFilterView(IsFilterActive); // מפעיל את הפילטר פעם אחת בלבד
         }
-        // בתוך MainViewModel.cs
+        private async void ExportParsedData(object obj)
+        {
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
+            {
+                MessageBox.Show("No logs loaded to export.", "Info", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            IsBusy = true;
+            StatusMessage = "Parsing and Exporting CSV...";
+
+            // שליחה לשירות שיצרנו - שולחים את הלוגים של הסשן הנוכחי
+            await _csvService.ExportLogsToCsvAsync(SelectedSession.Logs, SelectedSession.FileName);
+
+            IsBusy = false;
+            StatusMessage = "Ready";
+        }
 
 
         // --- TIME FOCUS FILTER ---
@@ -1141,14 +1163,16 @@ namespace IndiLogs_3._0.ViewModels
         {
             IEnumerable<LogEntry> currentLogs;
 
-            if (show)
+            // אם יש טקסט בחיפוש - אנחנו תמיד במצב "פילטור פעיל"
+            bool hasSearchText = !string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2;
+
+            if (show || hasSearchText)
             {
-                // בדיקה: האם יש פילטר מתקדם פעיל?
+                // 1. קביעת מקור הנתונים (פילטר מתקדם / פוקוס זמן / או הכל)
                 bool hasAdvancedFilter = _savedFilterRoot != null &&
                                          _savedFilterRoot.Children != null &&
                                          _savedFilterRoot.Children.Count > 0;
 
-                // === התיקון: מכבדים את התוצאות השמורות גם אם זה Advanced Filter וגם אם זה Time Focus ===
                 if (hasAdvancedFilter || _isTimeFocusActive)
                 {
                     currentLogs = _lastFilteredCache ?? new List<LogEntry>();
@@ -1158,26 +1182,29 @@ namespace IndiLogs_3._0.ViewModels
                     currentLogs = _allLogsCache;
                 }
 
-                // ... המשך הפונקציה נשאר זהה ...
+                // 2. פילטר Threads
                 if (_activeThreadFilters.Any())
                 {
                     currentLogs = currentLogs.Where(l => _activeThreadFilters.Contains(l.ThreadName));
                 }
 
-                if (!string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2)
+                // 3. === החיפוש המהיר (Quick Search) ===
+                // משאיר רק שורות שההודעה שלהן מכילה את הטקסט
+                if (hasSearchText)
                 {
                     currentLogs = currentLogs.Where(l =>
-                       (l.Message != null && l.Message.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0) ||
-                       (l.ThreadName != null && l.ThreadName.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0)
+                       l.Message != null &&
+                       l.Message.IndexOf(SearchText, StringComparison.OrdinalIgnoreCase) >= 0
                    );
                 }
             }
             else
             {
+                // אם הכל כבוי - מראים את הכל
                 currentLogs = _allLogsCache;
             }
 
-            // --- Filter Out (רץ תמיד) ---
+            // 4. Filter Out (שלילי) - רץ תמיד
             if (IsFilterOutActive && _negativeFilters.Any())
             {
                 currentLogs = currentLogs.Where(l =>
@@ -1198,6 +1225,7 @@ namespace IndiLogs_3._0.ViewModels
                 });
             }
 
+            // עדכון המסך
             Logs = currentLogs.ToList();
         }
         private void FilterOut(object p)

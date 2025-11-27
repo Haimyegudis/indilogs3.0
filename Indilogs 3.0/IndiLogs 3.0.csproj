@@ -178,6 +178,7 @@
     </Compile>
     <Compile Include="ObservableRangeCollection.cs" />
     <Compile Include="Services\AnalysisModels.cs" />
+    <Compile Include="Services\CsvExportService.cs" />
     <Compile Include="Services\DebugHelper.cs" />
     <Compile Include="FilterOutWindow.xaml.cs">
       <DependentUpon>FilterOutWindow.xaml</DependentUpon>

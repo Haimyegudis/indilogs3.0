@@ -192,11 +192,18 @@
                             </Style>
                         </ListBox.ItemContainerStyle>
                     </ListBox>
-
                     <StackPanel Grid.Row="2" Orientation="Vertical" Margin="0,10,0,0">
                         <Button Content="🗑 Clear All" Command="{Binding ClearCommand}" Background="{DynamicResource DangerColor}" Style="{DynamicResource PrimaryBtn}" Margin="0,0,0,5"/>
                         <Button Content="📌 Marked Lines" Command="{Binding OpenMarkedLogsWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
                         <Button Content="🔄 States" Command="{Binding OpenStatesWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
+
+                        <Button Content="📊 Export CSV" 
+            Command="{Binding ExportParsedDataCommand}" 
+            Style="{DynamicResource ModernBtn}" 
+            Background="{DynamicResource BgCard}" 
+            Margin="0,0,0,5"
+            ToolTip="Parse CH, IO, and Motor data to CSV"/>
+
                         <Button Content="⚙ Analyze" Command="{Binding RunAnalysisCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" ToolTip="Run Process Analysis"/>
                     </StackPanel>
                 </Grid>
