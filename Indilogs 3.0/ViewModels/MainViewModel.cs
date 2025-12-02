@@ -484,8 +484,20 @@ namespace IndiLogs_3._0.ViewModels
             RunAnalysisCommand = new RelayCommand(RunAnalysis);
             FilterToStateCommand = new RelayCommand(FilterToState);
 
-            ZoomInCommand = new RelayCommand(o => { if (SelectedTabIndex == 3) ScreenshotZoom = Math.Min(5000, ScreenshotZoom + 100); else GridFontSize = Math.Min(30, GridFontSize + 1); });
-            ZoomOutCommand = new RelayCommand(o => { if (SelectedTabIndex == 3) ScreenshotZoom = Math.Max(100, ScreenshotZoom - 100); else GridFontSize = Math.Max(8, GridFontSize - 1); });
+            ZoomInCommand = new RelayCommand(o =>
+            {
+                if (SelectedTabIndex == 4)
+                    ScreenshotZoom = Math.Min(5000, ScreenshotZoom + 100);
+                else
+                    GridFontSize = Math.Min(30, GridFontSize + 1);
+            }); 
+            ZoomOutCommand = new RelayCommand(o =>
+            {
+                if (SelectedTabIndex == 4)
+                    ScreenshotZoom = Math.Max(100, ScreenshotZoom - 100);
+                else
+                    GridFontSize = Math.Max(8, GridFontSize - 1);
+            });
 
             LivePlayCommand = new RelayCommand(LivePlay);
             LivePauseCommand = new RelayCommand(LivePause);
@@ -1578,23 +1590,59 @@ namespace IndiLogs_3._0.ViewModels
             {
                 IsBusy = true;
                 StatusMessage = $"Focusing state: {state.StateName}...";
+
                 Task.Run(() =>
                 {
+                    // 1. חישוב הזמנים
                     DateTime start = state.StartTime;
                     DateTime end = state.EndTime ?? DateTime.MaxValue;
-                    var rawTimeSlice = _allLogsCache.Where(l => l.Date >= start && l.Date <= end).ToList();
-                    var smartFiltered = rawTimeSlice.Where(l => IsDefaultLog(l)).ToList();
 
-                    Application.Current.Dispatcher.Invoke(() =>
+                    // 2. סינון הרשימה הראשית בלבד (מתוך _allLogsCache)
+                    if (_allLogsCache != null)
                     {
-                        _lastFilteredCache = rawTimeSlice;
-                        if (FilteredLogs != null) FilteredLogs.ReplaceAll(smartFiltered);
-                        _savedFilterRoot = null;
-                        _isTimeFocusActive = true;
-                        IsFilterActive = true;
-                        StatusMessage = $"State: {state.StateName} | Showing {rawTimeSlice.Count} logs";
+                        // א. כל הלוגים בטווח הזמן (עבור הטאב הראשי)
+                        var timeSlice = _allLogsCache
+                            .Where(l => l.Date >= start && l.Date <= end)
+                            .OrderByDescending(l => l.Date)
+                            .ToList();
+
+                        // ב. רק לוגים "חשובים" בטווח הזמן (עבור Logs Filtered)
+                        // זה שומר על הפילטר הדיפולטיבי של הטאב השני
+                        var smartFiltered = timeSlice.Where(l => IsDefaultLog(l)).ToList();
+
+                        Application.Current.Dispatcher.Invoke(() =>
+                        {
+                            // 3. עדכון משתני ה-MAIN
+                            _lastFilteredCache = timeSlice;
+                            _savedFilterRoot = null;
+                            _isTimeFocusActive = true;
+                            _isMainFilterActive = true;
+
+                            // 4. מעבר לטאב ה-LOGS הראשי (0)
+                            SelectedTabIndex = 0;
+
+                            // 5. רענון התצוגה הראשית
+                            UpdateMainLogsFilter(true);
+
+                            // 6. --- התוספת החדשה: עדכון טאב Logs (Filtered) ---
+                            if (FilteredLogs != null)
+                            {
+                                FilteredLogs.ReplaceAll(smartFiltered);
+                                // בחירת השורה הראשונה גם שם
+                                if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0];
+                            }
+
+                            // 7. עדכון הצ'קבוקסים ב-UI
+                            OnPropertyChanged(nameof(IsFilterActive));
+
+                            StatusMessage = $"State: {state.StateName} | Main: {timeSlice.Count}, Filtered: {smartFiltered.Count}";
+                            IsBusy = false;
+                        });
+                    }
+                    else
+                    {
                         IsBusy = false;
-                    });
+                    }
                 });
             }
         }
