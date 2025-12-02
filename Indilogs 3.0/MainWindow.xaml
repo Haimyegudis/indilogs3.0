@@ -122,92 +122,156 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="280"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="220"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Padding="10">
-                <Grid>
-                    <Grid.RowDefinitions>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                    </Grid.RowDefinitions>
+            <TabControl Grid.Column="0" 
+                        SelectedIndex="{Binding LeftTabIndex}"
+                        Background="{DynamicResource BgPanel}" 
+                        BorderThickness="0,0,1,0" 
+                        Margin="0" Padding="0">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Foreground" Value="{DynamicResource TextSecondary}"/>
+                        <Setter Property="FontSize" Value="12"/>
+                        <Setter Property="FontWeight" Value="SemiBold"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <Border Name="Border" BorderThickness="0,0,0,2" BorderBrush="Transparent" Padding="10,6" Cursor="Hand">
+                                        <ContentPresenter ContentSource="Header" HorizontalAlignment="Center"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="Border" Property="BorderBrush" Value="{DynamicResource PrimaryColor}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TabControl.Resources>
 
-                    <TextBlock Grid.Row="0" Text="EXPLORER" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" FontSize="11" Margin="0,0,0,10"/>
+                <TabItem Header="EXPLORER">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
 
-                    <ListBox Grid.Row="1" 
-         ItemsSource="{Binding LoadedSessions}" 
-         SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
-         Background="Transparent" 
-         BorderThickness="0" 
-         Foreground="{DynamicResource TextPrimary}"
-         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                        <TextBlock Grid.Row="0" Text="SESSIONS" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" FontSize="11" Margin="10,10,0,5"/>
 
-                        <ListBox.ItemTemplate>
-                            <DataTemplate>
-                                <Grid Margin="0,4">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
-                                    </Grid.ColumnDefinitions>
+                        <ListBox Grid.Row="1" 
+                                 ItemsSource="{Binding LoadedSessions}" 
+                                 SelectedItem="{Binding SelectedSession, Mode=TwoWay}"
+                                 Background="Transparent" BorderThickness="0" 
+                                 Foreground="{DynamicResource TextPrimary}"
+                                 ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                            <ListBox.ItemTemplate>
+                                <DataTemplate>
+                                    <Grid Margin="0,4">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+                                        <TextBlock Text="📄" Margin="0,0,6,0" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
+                                        <TextBlock Grid.Column="1" Text="{Binding FileName}" ToolTip="{Binding FilePath}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListBox.ItemTemplate>
 
-                                    <TextBlock Text="📄" Margin="0,0,6,0" 
-                           Foreground="{DynamicResource TextSecondary}" 
-                           VerticalAlignment="Center"/>
+                            <ListBox.ItemContainerStyle>
+                                <Style TargetType="ListBoxItem">
+                                    <Setter Property="Padding" Value="8,4"/>
+                                    <Setter Property="Cursor" Value="Hand"/>
+                                    <Setter Property="Template">
+                                        <Setter.Value>
+                                            <ControlTemplate TargetType="ListBoxItem">
+                                                <Border Name="Border" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
+                                                    <ContentPresenter/>
+                                                </Border>
+                                                <ControlTemplate.Triggers>
+                                                    <Trigger Property="IsMouseOver" Value="True">
+                                                        <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>
+                                                    </Trigger>
+                                                    <Trigger Property="IsSelected" Value="True">
+                                                        <Setter TargetName="Border" Property="Background" Value="{DynamicResource PrimaryColor}"/>
+                                                        <Setter Property="Foreground" Value="White"/>
+                                                        <Setter Property="FontWeight" Value="SemiBold"/>
+                                                    </Trigger>
+                                                </ControlTemplate.Triggers>
+                                            </ControlTemplate>
+                                        </Setter.Value>
+                                    </Setter>
+                                </Style>
+                            </ListBox.ItemContainerStyle>
+                        </ListBox>
 
-                                    <TextBlock Grid.Column="1" 
-                           Text="{Binding FileName}" 
-                           ToolTip="{Binding FilePath}" 
-                           TextTrimming="CharacterEllipsis" 
-                           VerticalAlignment="Center"/>
-                                </Grid>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
+                        <StackPanel Grid.Row="2" Orientation="Vertical" Margin="10">
+                            <Button Content="🗑 Clear All" Command="{Binding ClearCommand}" Background="{DynamicResource DangerColor}" Style="{DynamicResource PrimaryBtn}" Margin="0,0,0,5"/>
+                            <Button Content="📌 Marked Lines" Command="{Binding OpenMarkedLogsWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
+                            <Button Content="🔄 States" Command="{Binding OpenStatesWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
+                            <Button Content="📊 Export CSV" Command="{Binding ExportParsedDataCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5" ToolTip="Parse CH, IO, and Motor data to CSV"/>
+                            <Button Content="⚙ Analyze" Command="{Binding RunAnalysisCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" ToolTip="Run Process Analysis"/>
+                        </StackPanel>
+                    </Grid>
+                </TabItem>
 
-                        <ListBox.ItemContainerStyle>
-                            <Style TargetType="ListBoxItem">
-                                <Setter Property="Padding" Value="8,4"/>
-                                <Setter Property="Cursor" Value="Hand"/>
-                                <Setter Property="Template">
+                <TabItem Header="LOGGERS">
+                    <TreeView ItemsSource="{Binding LoggerTreeRoot}" 
+                              Background="Transparent" 
+                              BorderThickness="0" 
+                              Padding="5"
+                              Foreground="{DynamicResource TextPrimary}">
+                        <TreeView.ItemContainerStyle>
+                            <Style TargetType="TreeViewItem">
+                                <Setter Property="IsExpanded" Value="{Binding IsExpanded, Mode=TwoWay}"/>
+                                <Setter Property="IsSelected" Value="{Binding IsSelected, Mode=TwoWay}"/>
+                                <EventSetter Event="PreviewMouseRightButtonDown" Handler="TreeViewItem_PreviewMouseRightButtonDown"/>
+
+                                <Setter Property="Tag" Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=TreeView}}"/>
+
+                                <Setter Property="ContextMenu">
                                     <Setter.Value>
-                                        <ControlTemplate TargetType="ListBoxItem">
-                                            <Border Name="Border" Background="Transparent" CornerRadius="4" Padding="{TemplateBinding Padding}">
-                                                <ContentPresenter/>
-                                            </Border>
-                                            <ControlTemplate.Triggers>
-                                                <Trigger Property="IsMouseOver" Value="True">
-                                                    <Setter TargetName="Border" Property="Background" Value="#3E3E42"/>
-                                                </Trigger>
-                                                <Trigger Property="IsSelected" Value="True">
-                                                    <Setter TargetName="Border" Property="Background" Value="{DynamicResource PrimaryColor}"/>
-                                                    <Setter Property="Foreground" Value="White"/>
-                                                    <Setter Property="FontWeight" Value="SemiBold"/>
-                                                </Trigger>
-                                            </ControlTemplate.Triggers>
-                                        </ControlTemplate>
+                                        <ContextMenu>
+                                            <MenuItem Header="🎯 Show Only This" 
+                                                      Command="{Binding PlacementTarget.Tag.TreeShowOnlyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
+                                                      CommandParameter="{Binding}"/>
+                                            <MenuItem Header="📂 Show With Children" 
+                                                      Command="{Binding PlacementTarget.Tag.TreeShowWithChildrenCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
+                                                      CommandParameter="{Binding}"/>
+                                            <Separator/>
+                                            <MenuItem Header="🚫 Hide This Logger" 
+                                                      Command="{Binding PlacementTarget.Tag.TreeHideCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
+                                                      CommandParameter="{Binding}"/>
+                                            <MenuItem Header="🚫 Hide With Children" 
+                                                      Command="{Binding PlacementTarget.Tag.TreeHideWithChildrenCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
+                                                      CommandParameter="{Binding}"/>
+                                            <Separator/>
+                                            <MenuItem Header="✅ Show All" 
+                                                      Command="{Binding PlacementTarget.Tag.TreeShowAllCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
+                                        </ContextMenu>
                                     </Setter.Value>
                                 </Setter>
                             </Style>
-                        </ListBox.ItemContainerStyle>
-                    </ListBox>
-                    <StackPanel Grid.Row="2" Orientation="Vertical" Margin="0,10,0,0">
-                        <Button Content="🗑 Clear All" Command="{Binding ClearCommand}" Background="{DynamicResource DangerColor}" Style="{DynamicResource PrimaryBtn}" Margin="0,0,0,5"/>
-                        <Button Content="📌 Marked Lines" Command="{Binding OpenMarkedLogsWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
-                        <Button Content="🔄 States" Command="{Binding OpenStatesWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" Margin="0,0,0,5"/>
+                        </TreeView.ItemContainerStyle>
 
-                        <Button Content="📊 Export CSV" 
-            Command="{Binding ExportParsedDataCommand}" 
-            Style="{DynamicResource ModernBtn}" 
-            Background="{DynamicResource BgCard}" 
-            Margin="0,0,0,5"
-            ToolTip="Parse CH, IO, and Motor data to CSV"/>
-
-                        <Button Content="⚙ Analyze" Command="{Binding RunAnalysisCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgCard}" ToolTip="Run Process Analysis"/>
-                    </StackPanel>
-                </Grid>
-            </Border>
+                        <TreeView.ItemTemplate>
+                            <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding Count, StringFormat=' ({0})'}" Foreground="{DynamicResource TextSecondary}" Margin="5,0,0,0"/>
+                                </StackPanel>
+                            </HierarchicalDataTemplate>
+                        </TreeView.ItemTemplate>
+                    </TreeView>
+                </TabItem>
+            </TabControl>
 
             <Grid Grid.Column="1">
                 <Grid.RowDefinitions>
@@ -235,6 +299,7 @@
                 </Border>
 
                 <TabControl x:Name="MainTabs" Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex}" BorderThickness="0" Background="Transparent" Margin="0,5,0,0">
+
                     <TabItem Header="Logs">
                         <DataGrid x:Name="MainLogsGrid" ItemsSource="{Binding Logs}" SelectedItem="{Binding SelectedLog}" 
                                   FontSize="{Binding GridFontSize}" 
@@ -312,6 +377,53 @@
                                                 HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
                                                 TextTrimming="CharacterEllipsis" 
                                                 VerticalAlignment="Center"/>
+                                        </DataTemplate>
+                                    </DataGridTemplateColumn.CellTemplate>
+                                </DataGridTemplateColumn>
+                            </DataGrid.Columns>
+                        </DataGrid>
+                    </TabItem>
+
+                    <TabItem Header="APP">
+                        <DataGrid x:Name="AppLogsGrid" 
+          ItemsSource="{Binding AppDevLogsFiltered}" 
+          SelectedItem="{Binding SelectedLog}"
+          Sorting="AppLogsGrid_Sorting"
+          FontSize="{Binding GridFontSize}" 
+          FontFamily="{DynamicResource ContentFontFamily}"
+          FontWeight="{DynamicResource ContentFontWeight}"
+          AutoGenerateColumns="False" IsReadOnly="True" 
+          RowStyle="{DynamicResource LogRowStyle}" 
+          SelectionMode="Extended" SelectionUnit="FullRow">
+
+                            <DataGrid.InputBindings>
+                                <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
+                                <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ViewLogDetailsCommand}" CommandParameter="{Binding SelectedLog}" />
+                            </DataGrid.InputBindings>
+
+                            <DataGrid.ContextMenu>
+                                <ContextMenu>
+                                    <MenuItem Command="{Binding PlacementTarget.DataContext.FilterContextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" Header="Time Focus Filter"/>
+
+                                    <Separator/>
+                                    <MenuItem Header="Filter Out (Message)..." Command="{Binding FilterOutCommand}"/>
+                                </ContextMenu>
+                            </DataGrid.ContextMenu>
+
+                            <DataGrid.Columns>
+                                <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="50" FontWeight="Bold" CanUserSort="True" SortMemberPath="Level"/>
+                                <DataGridTextColumn Header="Time" Binding="{Binding Date, StringFormat='yyyy-MM-dd HH:mm:ss.fff'}" Width="160" CanUserSort="True" SortMemberPath="Time"/>
+                                <DataGridTextColumn Header="Logger" Binding="{Binding Logger}" Width="250" CanUserSort="True" SortMemberPath="Logger"/>
+                                <DataGridTextColumn Header="Thread" Binding="{Binding ThreadName}" Width="80" CanUserSort="True" SortMemberPath="Thread"/>
+
+                                <DataGridTemplateColumn Header="Message" Width="*">
+                                    <DataGridTemplateColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <controls:HighlightTextBlock 
+                        Text="{Binding Message}" 
+                        HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
+                        TextTrimming="CharacterEllipsis" 
+                        VerticalAlignment="Center"/>
                                         </DataTemplate>
                                     </DataGridTemplateColumn.CellTemplate>
                                 </DataGridTemplateColumn>
@@ -406,15 +518,18 @@
                     </StackPanel>
 
                     <ListView ItemsSource="{Binding SavedConfigs}" 
-                  SelectedItem="{Binding SelectedConfig, Mode=TwoWay}"
-                  Background="Transparent" 
-                  BorderThickness="0" 
-                  Foreground="{DynamicResource TextPrimary}">
+          SelectedItem="{Binding SelectedConfig, Mode=TwoWay}"
+          Background="Transparent" 
+          BorderThickness="0" 
+          Foreground="{DynamicResource TextPrimary}"
+          HorizontalContentAlignment="Stretch">
                         <ListView.ItemTemplate>
                             <DataTemplate>
-                                <Grid Margin="0,2">
+                                <Grid Margin="0,2" Background="Transparent">
                                     <Grid.InputBindings>
-                                        <MouseBinding Gesture="LeftDoubleClick" Command="{Binding DataContext.ApplyConfigCommand, RelativeSource={RelativeSource AncestorType=Window}}" CommandParameter="{Binding}"/>
+                                        <MouseBinding Gesture="LeftDoubleClick" 
+                                  Command="{Binding DataContext.ApplyConfigCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                  CommandParameter="{Binding}"/>
                                     </Grid.InputBindings>
                                     <TextBlock Text="{Binding Name}" FontWeight="SemiBold"/>
                                 </Grid>
@@ -447,16 +562,16 @@
 
         <Grid Grid.RowSpan="3" Background="#CC000000" Visibility="{Binding IsBusy, Converter={StaticResource BooleanToVisibilityConverter}, FallbackValue=Collapsed}" Panel.ZIndex="999">
             <Border Background="{DynamicResource BgCard}" 
-        BorderBrush="{DynamicResource PrimaryColor}" 
-        BorderThickness="1" 
-        CornerRadius="15" 
-        HorizontalAlignment="Center" 
-        VerticalAlignment="Center" 
-        Width="450" 
-        Height="320"
-        MaxWidth="450"
-        MaxHeight="320"
-        Effect="{DynamicResource ShadowEffect}">
+                    BorderBrush="{DynamicResource PrimaryColor}" 
+                    BorderThickness="1" 
+                    CornerRadius="15" 
+                    HorizontalAlignment="Center" 
+                    VerticalAlignment="Center" 
+                    Width="450" 
+                    Height="320"
+                    MaxWidth="450"
+                    MaxHeight="320"
+                    Effect="{DynamicResource ShadowEffect}">
 
                 <Border.Resources>
                     <DropShadowEffect x:Key="ShadowEffect" BlurRadius="25" ShadowDepth="0" Opacity="0.6" Color="Black"/>
@@ -471,7 +586,7 @@
                     <Grid Grid.Row="0" Width="130" Height="130" VerticalAlignment="Center" HorizontalAlignment="Center">
                         <Ellipse Stroke="{DynamicResource BorderColor}" StrokeThickness="10" Width="130" Height="130"/>
                         <Path Stroke="{DynamicResource PrimaryColor}" StrokeThickness="10" StrokeStartLineCap="Round" StrokeEndLineCap="Round"
-                  Data="M 65,0 A 65,65 0 0 1 130,65" RenderTransformOrigin="0.5,0.5">
+                              Data="M 65,0 A 65,65 0 0 1 130,65" RenderTransformOrigin="0.5,0.5">
                             <Path.RenderTransform>
                                 <RotateTransform Angle="0"/>
                             </Path.RenderTransform>
@@ -480,7 +595,7 @@
                                     <BeginStoryboard>
                                         <Storyboard>
                                             <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                 From="0" To="360" Duration="0:0:1.2" RepeatBehavior="Forever"/>
+                                                             From="0" To="360" Duration="0:0:1.2" RepeatBehavior="Forever"/>
                                         </Storyboard>
                                     </BeginStoryboard>
                                 </EventTrigger>
@@ -488,22 +603,22 @@
                         </Path>
                         <StackPanel VerticalAlignment="Center" HorizontalAlignment="Center">
                             <TextBlock Text="{Binding CurrentProgress, StringFormat='{}{0:0}%'}" 
-                           FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" 
-                           HorizontalAlignment="Center"/>
+                                       FontSize="32" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" 
+                                       HorizontalAlignment="Center"/>
                         </StackPanel>
                     </Grid>
 
                     <TextBlock Grid.Row="1" 
-                   Text="{Binding StatusMessage}" 
-                   FontSize="15" 
-                   Foreground="{DynamicResource TextSecondary}" 
-                   HorizontalAlignment="Center" 
-                   VerticalAlignment="Top" 
-                   TextAlignment="Center" 
-                   TextWrapping="Wrap" 
-                   TextTrimming="CharacterEllipsis"
-                   MaxHeight="75"
-                   Margin="0,15,0,0"/>
+                               Text="{Binding StatusMessage}" 
+                               FontSize="15" 
+                               Foreground="{DynamicResource TextSecondary}" 
+                               HorizontalAlignment="Center" 
+                               VerticalAlignment="Top" 
+                               TextAlignment="Center" 
+                               TextWrapping="Wrap" 
+                               TextTrimming="CharacterEllipsis"
+                               MaxHeight="75"
+                               Margin="0,15,0,0"/>
                 </Grid>
             </Border>
         </Grid>

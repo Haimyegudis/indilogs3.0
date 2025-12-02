@@ -9,14 +9,25 @@ namespace IndiLogs_3._0
         {
             base.OnStartup(e);
 
-            // 1. פתיחת החלון הראשי מיד
+            // יצירת החלון הראשי
             var mainWindow = new MainWindow();
             this.MainWindow = mainWindow;
+
+            // אין צורך להעביר את הארגומנטים כאן (e.Args) 
+            // כי MainWindow.xaml.cs כבר בודק את Environment.GetCommandLineArgs() בעצמו.
+
             mainWindow.Show();
 
-            // 2. הרצת בדיקת העדכון ברקע (כמו בתוכנה הישנה)
-            var updateService = new UpdateService();
-            await updateService.CheckForUpdatesSimpleAsync();
+            // בדיקת עדכונים ברקע
+            try
+            {
+                var updateService = new UpdateService();
+                await updateService.CheckForUpdatesSimpleAsync();
+            }
+            catch
+            {
+                // התעלמות משגיאות אם אין אינטרנט או שרת העדכונים למטה
+            }
         }
     }
 }

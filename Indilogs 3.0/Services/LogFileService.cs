@@ -1,6 +1,7 @@
 ﻿using IndiLogs_3._0.Models;
 using Indigo.Infra.ICL.Core.Logging;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -8,6 +9,7 @@ using System.IO.Compression;
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Threading;
 using System.Threading.Tasks;
 using System.Windows.Media.Imaging;
 
@@ -15,14 +17,36 @@ namespace IndiLogs_3._0.Services
 {
     public class LogFileService
     {
-        // שינוי: ה-Progress מקבל כעת Tuple של (אחוז, הודעה)
-        // שנה את החתימה לקבלת IProgress<(double, string)>
+        // Regex מותאם לפורמט APPDEV
+        private const string AppDevRegexPattern =
+            @"(?<Timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\x1e" +
+            @"(?<Thread>[^\x1e]*)\x1e" +
+            @"(?<RootIFlowId>[^\x1e]*)\x1e" +
+            @"(?<IFlowId>[^\x1e]*)\x1e" +
+            @"(?<IFlowName>[^\x1e]*)\x1e" +
+            @"(?<Pattern>[^\x1e]*)\x1e" +
+            @"(?<Context>[^\x1e]*)\x1e" +
+            @"(?<Level>\w+)\s(?<Logger>[^\x1e]*)\x1e" +
+            @"(?<Location>[^\x1e]*)\x1e" +
+            @"(?<Message>.*?)\x1e" +
+            @"(?<Exception>.*?)\x1e" +
+            @"(?<Data>.*?)(\x1e|$)";
+
+        private readonly Regex _appDevRegex = new Regex(AppDevRegexPattern, RegexOptions.Singleline | RegexOptions.Compiled);
+        private readonly Regex _dateStartPattern = new Regex(@"^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3}", RegexOptions.Compiled);
+
         public async Task<LogSessionData> LoadSessionAsync(string[] filePaths, IProgress<(double, string)> progress)
         {
             return await Task.Run(() =>
             {
                 var session = new LogSessionData();
                 if (filePaths == null || filePaths.Length == 0) return session;
+
+                // שימוש באוספים בטוחים לשימוש במקביל (Thread-Safe)
+                var logsBag = new ConcurrentBag<LogEntry>();
+                var appDevLogsBag = new ConcurrentBag<LogEntry>();
+                var eventsBag = new ConcurrentBag<EventEntry>();
+                var screenshotsBag = new ConcurrentBag<BitmapImage>();
 
                 long totalBytesAllFiles = 0;
                 foreach (var p in filePaths)
@@ -40,53 +64,63 @@ namespace IndiLogs_3._0.Services
                         long currentFileSize = new FileInfo(filePath).Length;
                         string fileName = Path.GetFileName(filePath);
 
-                        // דיווח התחלתי לקובץ
-                        progress?.Report((CalculatePercent(processedBytesGlobal, totalBytesAllFiles), $"Opening {fileName}..."));
+                        progress?.Report((CalculatePercent(processedBytesGlobal, totalBytesAllFiles), $"Reading {fileName}..."));
 
                         if (extension == ".zip")
                         {
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var archive = new ZipArchive(fs, ZipArchiveMode.Read))
                             {
-                                long totalZipSize = archive.Entries.Sum(e => e.Length);
-                                long currentZipProcessed = 0;
+                                // שלב 1: מיפוי וחילוץ לזיכרון
+                                var filesToProcess = new List<ZipEntryData>();
+                                long totalEntries = archive.Entries.Count;
+                                long extractedCount = 0;
 
                                 foreach (var entry in archive.Entries)
                                 {
+                                    extractedCount++;
+
+                                    // עדכון התקדמות רציף בזמן החילוץ (50% מהמשקל)
+                                    if (extractedCount % 10 == 0)
+                                    {
+                                        double extractRatio = (double)extractedCount / totalEntries;
+                                        double fileProgress = (extractRatio * 0.5) * currentFileSize; // Max 50%
+                                        double totalPercent = ((processedBytesGlobal + fileProgress) / totalBytesAllFiles) * 100;
+                                        progress?.Report((Math.Min(99, totalPercent), $"Extracting: {entry.Name}"));
+                                    }
+
                                     if (entry.Length == 0) continue;
 
-                                    // דיווח על הפעולה הנוכחית
-                                    string action = "Processing";
-                                    if (entry.Name.EndsWith(".log")) action = "Parsing Log";
-                                    else if (entry.Name.EndsWith(".csv")) action = "Reading Events";
-                                    else if (entry.Name.EndsWith(".png")) action = "Loading Image";
+                                    var entryData = new ZipEntryData { Name = entry.Name };
+                                    bool isAppDevPath = entry.FullName.IndexOf("IndigoLogs/Logger Files", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                        entry.FullName.IndexOf("IndigoLogs\\Logger Files", StringComparison.OrdinalIgnoreCase) >= 0;
+                                    bool isAppDevName = entry.Name.ToUpper().Contains("APPDEV");
 
-                                    // חישוב אחוזים
-                                    currentZipProcessed += entry.Length;
-                                    double fileContribution = ((double)currentZipProcessed / totalZipSize) * currentFileSize;
-                                    double totalProgress = ((processedBytesGlobal + fileContribution) / totalBytesAllFiles) * 100;
-
-                                    // שליחת דיווח: אחוז + הודעה
-                                    progress?.Report((Math.Min(99, totalProgress), $"{action}: {entry.Name}"));
-
-                                    // לוגיקת הטעינה (זהה למקור)
-                                    if (entry.Name.IndexOf("engineGroupA.file", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                        entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase))
+                                    if (isAppDevPath && isAppDevName)
                                     {
-                                        using (var ms = CopyToMemory(entry))
-                                            session.Logs.AddRange(ParseLogStream(ms));
+                                        entryData.Type = FileType.AppDevLog;
+                                        entryData.Stream = CopyToMemory(entry);
+                                        filesToProcess.Add(entryData);
+                                    }
+                                    else if (entry.Name.IndexOf("engineGroupA.file", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                             (entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase) && !isAppDevPath))
+                                    {
+                                        entryData.Type = FileType.MainLog;
+                                        entryData.Stream = CopyToMemory(entry);
+                                        filesToProcess.Add(entryData);
                                     }
                                     else if (entry.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
                                     {
-                                        using (var ms = CopyToMemory(entry))
-                                            session.Events.AddRange(ParseEventsCsv(ms));
+                                        entryData.Type = FileType.EventsCsv;
+                                        entryData.Stream = CopyToMemory(entry);
+                                        filesToProcess.Add(entryData);
                                     }
                                     else if (entry.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase) ||
                                              entry.Name.EndsWith(".jpg", StringComparison.OrdinalIgnoreCase))
                                     {
                                         var ms = CopyToMemory(entry);
-                                        var bitmap = LoadBitmapFromStream(ms);
-                                        if (bitmap != null) session.Screenshots.Add(bitmap);
+                                        var bmp = LoadBitmapFromStream(ms);
+                                        if (bmp != null) screenshotsBag.Add(bmp);
                                     }
                                     else if (entry.Name.Equals("Readme.txt", StringComparison.OrdinalIgnoreCase))
                                     {
@@ -104,32 +138,69 @@ namespace IndiLogs_3._0.Services
                                             session.SetupInfo = r.ReadToEnd();
                                     }
                                 }
+
+                                // שלב 2: עיבוד מקבילי (50% הנותרים)
+                                int totalFilesToParse = filesToProcess.Count;
+                                int processedCount = 0;
+
+                                Parallel.ForEach(filesToProcess, item =>
+                                {
+                                    using (item.Stream)
+                                    {
+                                        if (item.Type == FileType.AppDevLog)
+                                        {
+                                            foreach (var l in ParseAppDevLogStream(item.Stream)) appDevLogsBag.Add(l);
+                                        }
+                                        else if (item.Type == FileType.MainLog)
+                                        {
+                                            foreach (var l in ParseLogStream(item.Stream)) logsBag.Add(l);
+                                        }
+                                        else if (item.Type == FileType.EventsCsv)
+                                        {
+                                            foreach (var e in ParseEventsCsv(item.Stream)) eventsBag.Add(e);
+                                        }
+                                    }
+
+                                    // עדכון התקדמות בזמן העיבוד המקבילי
+                                    int current = Interlocked.Increment(ref processedCount);
+                                    if (current % 5 == 0 || current == totalFilesToParse)
+                                    {
+                                        double parseRatio = (double)current / totalFilesToParse;
+                                        // מוסיפים את ה-50% שכבר בוצעו בשלב החילוץ
+                                        double fileProgress = (0.5 + (parseRatio * 0.5)) * currentFileSize;
+                                        double totalPercent = ((processedBytesGlobal + fileProgress) / totalBytesAllFiles) * 100;
+                                        progress?.Report((Math.Min(99, totalPercent), $"Parsing: {current}/{totalFilesToParse}"));
+                                    }
+                                });
                             }
                         }
                         else
                         {
-                            // טיפול בקבצים רגילים
-                            progress?.Report((CalculatePercent(processedBytesGlobal, totalBytesAllFiles), $"Reading {fileName}..."));
-
+                            // קובץ בודד
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var ms = new MemoryStream())
                             {
                                 fs.CopyTo(ms);
                                 ms.Position = 0;
-                                session.Logs.AddRange(ParseLogStream(ms));
+
+                                if (fileName.ToUpper().Contains("APPDEV"))
+                                    foreach (var l in ParseAppDevLogStream(ms)) appDevLogsBag.Add(l);
+                                else
+                                    foreach (var l in ParseLogStream(ms)) logsBag.Add(l);
                             }
                         }
 
                         processedBytesGlobal += currentFileSize;
                     }
 
-                    progress?.Report((99, "Sorting & Finalizing..."));
+                    progress?.Report((98, "Sorting..."));
 
-                    if (session.Logs.Count > 0)
-                        session.Logs = session.Logs.OrderByDescending(x => x.Date).ToList();
+                    session.Logs = logsBag.OrderByDescending(x => x.Date).ToList();
+                    session.AppDevLogs = appDevLogsBag.OrderByDescending(x => x.Date).ToList();
+                    session.Events = eventsBag.OrderByDescending(x => x.Time).ToList();
+                    session.Screenshots = screenshotsBag.ToList();
 
-                    if (session.Events.Count > 0)
-                        session.Events = session.Events.OrderByDescending(x => x.Time).ToList();
+                    progress?.Report((100, "Ready"));
                 }
                 catch (Exception ex)
                 {
@@ -140,10 +211,77 @@ namespace IndiLogs_3._0.Services
             });
         }
 
-        private double CalculatePercent(long processed, long total)
+        private enum FileType { MainLog, AppDevLog, EventsCsv }
+        private class ZipEntryData { public string Name; public FileType Type; public MemoryStream Stream; }
+
+        private double CalculatePercent(long processed, long total) => total == 0 ? 0 : Math.Min(99, ((double)processed / total) * 100);
+
+        private List<LogEntry> ParseAppDevLogStream(Stream stream)
         {
-            if (total == 0) return 0;
-            return Math.Min(99, ((double)processed / total) * 100);
+            var list = new List<LogEntry>();
+            try
+            {
+                if (stream.Position != 0) stream.Position = 0;
+                using (var reader = new StreamReader(stream, Encoding.UTF8))
+                {
+                    string line;
+                    StringBuilder buffer = new StringBuilder();
+                    while ((line = reader.ReadLine()) != null)
+                    {
+                        if (line == "!!![V2]") continue;
+                        if (_dateStartPattern.IsMatch(line))
+                        {
+                            if (buffer.Length > 0)
+                            {
+                                var l = ProcessAppDevBuffer(buffer.ToString());
+                                if (l != null) list.Add(l);
+                                buffer.Clear();
+                            }
+                        }
+                        buffer.AppendLine(line);
+                    }
+                    if (buffer.Length > 0)
+                    {
+                        var l = ProcessAppDevBuffer(buffer.ToString());
+                        if (l != null) list.Add(l);
+                    }
+                }
+            }
+            catch { }
+            return list;
+        }
+
+        private LogEntry ProcessAppDevBuffer(string rawText)
+        {
+            var match = _appDevRegex.Match(rawText);
+            if (!match.Success) return null;
+
+            string timestampStr = match.Groups["Timestamp"].Value;
+
+            // תמיכה בפורמט תאריך עם פסיק (חשוב!)
+            if (!DateTime.TryParseExact(timestampStr, "yyyy-MM-dd HH:mm:ss,fff",
+                System.Globalization.CultureInfo.InvariantCulture,
+                System.Globalization.DateTimeStyles.None, out DateTime date))
+            {
+                DateTime.TryParse(timestampStr, out date);
+            }
+
+            string message = match.Groups["Message"].Value.Trim();
+            string exception = match.Groups["Exception"].Value.Trim();
+            string data = match.Groups["Data"].Value.Trim();
+
+            if (!string.IsNullOrEmpty(exception)) message += $"\n[EXC]: {exception}";
+            if (!string.IsNullOrEmpty(data)) message += $"\n[DATA]: {data}";
+
+            return new LogEntry
+            {
+                Date = date,
+                ThreadName = match.Groups["Thread"].Value,
+                Level = match.Groups["Level"].Value.ToUpper(),
+                Logger = match.Groups["Logger"].Value,
+                Message = message,
+                ProcessName = "APPDEV"
+            };
         }
 
         public List<LogEntry> ParseLogStream(Stream stream)
@@ -151,6 +289,7 @@ namespace IndiLogs_3._0.Services
             var list = new List<LogEntry>();
             try
             {
+                if (stream.Position != 0) stream.Position = 0;
                 var reader = new IndigoLogsReader(stream);
                 while (reader.MoveToNext())
                 {
@@ -177,11 +316,11 @@ namespace IndiLogs_3._0.Services
             var list = new List<EventEntry>();
             try
             {
+                if (stream.Position != 0) stream.Position = 0;
                 using (var reader = new StreamReader(stream))
                 {
                     string header = reader.ReadLine();
                     if (header == null) return list;
-
                     var headers = header.Split(',');
                     int timeIdx = Array.IndexOf(headers, "Time");
                     int nameIdx = Array.IndexOf(headers, "Name");
@@ -193,9 +332,7 @@ namespace IndiLogs_3._0.Services
                     {
                         var line = reader.ReadLine();
                         if (string.IsNullOrWhiteSpace(line)) continue;
-
                         var parts = SplitCsvLine(line);
-
                         if (parts.Count > timeIdx && timeIdx >= 0)
                         {
                             string timeStr = parts[timeIdx].Trim('"');
@@ -209,20 +346,13 @@ namespace IndiLogs_3._0.Services
                                     Severity = (severityIdx >= 0 && parts.Count > severityIdx) ? parts[severityIdx] : "",
                                     Description = (subsystemIdx >= 0 && parts.Count > subsystemIdx) ? parts[subsystemIdx] : ""
                                 };
-
-                                if (string.IsNullOrWhiteSpace(entry.Name) && string.IsNullOrWhiteSpace(entry.Description))
-                                    continue;
-
-                                list.Add(entry);
+                                if (!string.IsNullOrWhiteSpace(entry.Name)) list.Add(entry);
                             }
                         }
                     }
                 }
             }
-            catch (Exception ex)
-            {
-                Debug.WriteLine($"[CSV ERROR] {ex.Message}");
-            }
+            catch { }
             return list;
         }
 
@@ -231,45 +361,13 @@ namespace IndiLogs_3._0.Services
             var result = new List<string>();
             var current = new StringBuilder();
             bool inQuotes = false;
-            bool inBraces = false;
-
             for (int i = 0; i < line.Length; i++)
             {
                 char c = line[i];
-
-                if (c == '"')
-                {
-                    if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
-                    {
-                        current.Append('"');
-                        i++;
-                    }
-                    else
-                    {
-                        inQuotes = !inQuotes;
-                    }
-                }
-                else if (c == '{')
-                {
-                    inBraces = true;
-                    current.Append(c);
-                }
-                else if (c == '}')
-                {
-                    inBraces = false;
-                    current.Append(c);
-                }
-                else if (c == ',' && !inQuotes && !inBraces)
-                {
-                    result.Add(current.ToString());
-                    current.Clear();
-                }
-                else
-                {
-                    current.Append(c);
-                }
+                if (c == '"') inQuotes = !inQuotes;
+                else if (c == ',' && !inQuotes) { result.Add(current.ToString()); current.Clear(); }
+                else current.Append(c);
             }
-
             result.Add(current.ToString());
             return result;
         }
@@ -286,6 +384,7 @@ namespace IndiLogs_3._0.Services
         {
             try
             {
+                if (stream.Position != 0) stream.Position = 0;
                 var bitmap = new BitmapImage();
                 bitmap.BeginInit();
                 bitmap.CacheOption = BitmapCacheOption.OnLoad;
