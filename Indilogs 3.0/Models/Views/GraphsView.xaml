@@ -100,60 +100,83 @@
                                           Visibility="{Binding IsToolbarPinned, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverted}"/>
                         </StackPanel>
                     </Grid>
-
                     <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto" 
-                                  Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+              Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
                         <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="5">
 
+                            <!-- ============ PLAY CONTROLS ============ -->
                             <Border BorderBrush="#444" BorderThickness="1" CornerRadius="3" Margin="0,0,10,0" Padding="5,2">
                                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                     <Button Content="&lt;&lt;" Command="{Binding SpeedDownCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,2,0" ToolTip="Slower"/>
-                                    <ToggleButton Content="▶" IsChecked="{Binding IsPlaying}" Command="{Binding PlayCommand}" ToolTip="Play (Entire Log or Selection)" Style="{StaticResource ModernToggleBtn}" Margin="0,0,2,0"/>
+                                    <ToggleButton Content="▶" IsChecked="{Binding IsPlaying}" Command="{Binding PlayCommand}" ToolTip="Play" Style="{StaticResource ModernToggleBtn}" Margin="0,0,2,0"/>
                                     <Button Content="⏸" Command="{Binding PauseCommand}" ToolTip="Pause" Style="{DynamicResource ModernBtn}" Margin="0,0,2,0"/>
                                     <Button Content="&gt;&gt;" Command="{Binding SpeedUpCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,5,0" ToolTip="Faster"/>
                                     <TextBlock Text="{Binding PlaybackSpeedText}" Foreground="Gray" VerticalAlignment="Center" FontWeight="Bold" Width="40" TextAlignment="Center"/>
                                 </StackPanel>
                             </Border>
 
+                            <!-- ============ TIME CONTROLS (FIXED BINDING!) ============ -->
                             <Border BorderBrush="#444" BorderThickness="1" CornerRadius="3" Margin="0,0,10,0" Padding="5,2">
-                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" FlowDirection="RightToLeft">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
 
-                                    <TextBlock Text="Start:" VerticalAlignment="Center" Margin="5,0" FontWeight="Bold"/>
-                                    <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                        <RepeatButton.CommandParameter>
-                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                                <Binding Source="Start"/>
-                                                <Binding Source="60"/>
-                                            </MultiBinding>
-                                        </RepeatButton.CommandParameter>
-                                    </RepeatButton>
-                                    <TextBox Text="{Binding FilterStartTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
-                                    <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                    <!-- Start on LEFT -->
+                                    <TextBlock Text="Start:" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                                    <RepeatButton Content="-" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.Command>
+                                            <Binding Path="StepTimeCommand"/>
+                                        </RepeatButton.Command>
                                         <RepeatButton.CommandParameter>
                                             <MultiBinding Converter="{StaticResource ArrayConverter}">
                                                 <Binding Source="Start"/>
                                                 <Binding Source="-60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+                                    <!-- CRITICAL: Bind to FilterStartTime -->
+                                    <TextBox Text="{Binding FilterStartTime, StringFormat='HH:mm:ss'}" 
+                         Width="60" TextAlignment="Center" IsReadOnly="True" 
+                         Background="Transparent" Foreground="{DynamicResource TextPrimary}" 
+                         BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <RepeatButton Content="+" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.Command>
+                                            <Binding Path="StepTimeCommand"/>
+                                        </RepeatButton.Command>
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="Start"/>
+                                                <Binding Source="60"/>
                                             </MultiBinding>
                                         </RepeatButton.CommandParameter>
                                     </RepeatButton>
 
                                     <TextBlock Text=" ➜ " Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="10,0"/>
 
-                                    <TextBlock Text="End:" VerticalAlignment="Center" Margin="5,0" FontWeight="Bold"/>
-                                    <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                        <RepeatButton.CommandParameter>
-                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                                <Binding Source="End"/>
-                                                <Binding Source="60"/>
-                                            </MultiBinding>
-                                        </RepeatButton.CommandParameter>
-                                    </RepeatButton>
-                                    <TextBox Text="{Binding FilterEndTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
-                                    <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                    <!-- End on RIGHT -->
+                                    <TextBlock Text="End:" VerticalAlignment="Center" Margin="0,0,5,0" FontWeight="Bold"/>
+                                    <RepeatButton Content="-" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.Command>
+                                            <Binding Path="StepTimeCommand"/>
+                                        </RepeatButton.Command>
                                         <RepeatButton.CommandParameter>
                                             <MultiBinding Converter="{StaticResource ArrayConverter}">
                                                 <Binding Source="End"/>
                                                 <Binding Source="-60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+                                    <!-- CRITICAL: Bind to FilterEndTime -->
+                                    <TextBox Text="{Binding FilterEndTime, StringFormat='HH:mm:ss'}" 
+                         Width="60" TextAlignment="Center" IsReadOnly="True" 
+                         Background="Transparent" Foreground="{DynamicResource TextPrimary}" 
+                         BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <RepeatButton Content="+" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.Command>
+                                            <Binding Path="StepTimeCommand"/>
+                                        </RepeatButton.Command>
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="End"/>
+                                                <Binding Source="60"/>
                                             </MultiBinding>
                                         </RepeatButton.CommandParameter>
                                     </RepeatButton>
@@ -163,6 +186,7 @@
                                 </StackPanel>
                             </Border>
 
+                            <!-- ============ OTHER CONTROLS ============ -->
                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                 <ToggleButton Content="📏 Measure" ToolTip="Ctrl+Click on chart to measure" IsChecked="{Binding IsMeasureMode}" Style="{StaticResource ModernToggleBtn}" Margin="0,0,10,0"/>
                                 <Button Content="➕ Chart" Command="{Binding AddChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2"/>

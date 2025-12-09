@@ -53,10 +53,9 @@ namespace IndiLogs_3._0.ViewModels
             CreateNewModel();
             Controller = new PlotController();
             Controller.UnbindAll();
-            // הגדרות שליטה: זום בגלגלת, גרירה במקש שמאלי
             Controller.BindMouseDown(OxyMouseButton.Left, PlotCommands.PanAt);
-            Controller.BindMouseWheel(PlotCommands.ZoomWheel);
-            Controller.BindMouseDown(OxyMouseButton.Left, OxyModifierKeys.None, 2, PlotCommands.ResetAt); // דאבל קליק לאיפוס
+            Controller.BindMouseWheel(PlotCommands.ZoomWheelFine);
+            Controller.BindMouseDown(OxyMouseButton.Left, OxyModifierKeys.None, 2, PlotCommands.ResetAt);
         }
 
         public void CreateNewModel()
@@ -64,10 +63,9 @@ namespace IndiLogs_3._0.ViewModels
             Model = new PlotModel { TextColor = OxyColors.White, PlotAreaBorderColor = OxyColors.Gray, Background = OxyColors.Transparent };
             Model.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight, LegendTextColor = OxyColors.White, LegendBackground = OxyColor.FromAColor(200, OxyColors.Black), LegendBorder = OxyColors.Gray });
 
-            // ציר Y
-            Model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, TextColor = OxyColors.White, MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot, TicklineColor = OxyColors.White, AxislineColor = OxyColors.White, Key = "Y" });
-            // ציר X (זמן)
-            Model.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", TextColor = OxyColors.White, MajorGridlineStyle = LineStyle.Solid, TicklineColor = OxyColors.White, AxislineColor = OxyColors.White, Key = "X" });
+            // BLACK text for axes
+            Model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot, TicklineColor = OxyColors.Black, AxislineColor = OxyColors.Black, Key = "Y" });
+            Model.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, TicklineColor = OxyColors.Black, AxislineColor = OxyColors.Black, Key = "X" });
         }
     }
 
@@ -86,35 +84,30 @@ namespace IndiLogs_3._0.ViewModels
         private SingleChartViewModel _selectedChart;
         public SingleChartViewModel SelectedChart { get => _selectedChart; set { if (_selectedChart != null) _selectedChart.IsActive = false; _selectedChart = value; if (_selectedChart != null) _selectedChart.IsActive = true; OnPropertyChanged(); } }
 
-        // --- Toolbar ---
         private bool _isToolbarPinned = true;
         public bool IsToolbarPinned { get => _isToolbarPinned; set { _isToolbarPinned = value; OnPropertyChanged(); IsToolbarVisible = value; } }
         private bool _isToolbarVisible = true;
         public bool IsToolbarVisible { get => _isToolbarVisible; set { _isToolbarVisible = value; OnPropertyChanged(); } }
 
-        private string _status;
+        private string _status = "Ready";
         public string Status { get => _status; set { _status = value; OnPropertyChanged(); } }
 
         private string _treeSearchText;
         public string TreeSearchText { get => _treeSearchText; set { _treeSearchText = value; OnPropertyChanged(); FilterTree(_treeSearchText); } }
 
-        // --- Time Control ---
         private DateTime _logStartTime;
         private DateTime _logEndTime;
 
-        // טווח התצוגה הנוכחי
         private DateTime _filterStartTime;
         public DateTime FilterStartTime { get => _filterStartTime; set { _filterStartTime = value; OnPropertyChanged(); } }
 
         private DateTime _filterEndTime;
         public DateTime FilterEndTime { get => _filterEndTime; set { _filterEndTime = value; OnPropertyChanged(); } }
 
-        // גבולות נעילה (אם אנחנו במצב סטייט, אלו יהיו גבולות הסטייט)
         private DateTime _absoluteMinTime;
         private DateTime _absoluteMaxTime;
         private bool _isLockedToState = false;
 
-        // --- Playback ---
         private DispatcherTimer _playbackTimer;
         private bool _isPlaying;
         public bool IsPlaying { get => _isPlaying; set { _isPlaying = value; OnPropertyChanged(); } }
@@ -123,7 +116,6 @@ namespace IndiLogs_3._0.ViewModels
         public double PlaybackSpeed { get => _playbackSpeed; set { _playbackSpeed = value; OnPropertyChanged(); OnPropertyChanged(nameof(PlaybackSpeedText)); } }
         public string PlaybackSpeedText => $"{_playbackSpeed:0.0}x";
 
-        // --- Commands ---
         public ICommand SpeedUpCommand { get; }
         public ICommand SpeedDownCommand { get; }
         public ICommand AddChartCommand { get; }
@@ -141,8 +133,7 @@ namespace IndiLogs_3._0.ViewModels
         public bool IsMeasureMode { get => _isMeasureMode; set { _isMeasureMode = value; OnPropertyChanged(); Status = value ? "Click 1st point to start measure." : "Measurement mode off."; if (!value) ClearMeasurement(SelectedChart); } }
         private DataPoint? _measureStart;
         private bool _hasActiveMeasurement = false;
-
-        private double _sharedMinX; private double _sharedMaxX; private bool _isSyncing = false;
+        private bool _isSyncing = false;
 
         public GraphsViewModel()
         {
@@ -155,12 +146,8 @@ namespace IndiLogs_3._0.ViewModels
             ClearChartCommand = new RelayCommand(o => { if (SelectedChart != null) { SelectedChart.Model.Series.Clear(); ClearMeasurement(SelectedChart); SelectedChart.Model.InvalidatePlot(true); SelectedChart.Title = "Empty Chart"; } });
             ToggleMeasureCommand = new RelayCommand(o => IsMeasureMode = !IsMeasureMode);
 
-            // Apply
-            ApplyTimeFilterCommand = new RelayCommand(o => UpdateGraphsView(FilterStartTime, FilterEndTime));
-
-            // Reset
-            ResetZoomCommand = new RelayCommand(o => UnlockAndReset());
-
+            ApplyTimeFilterCommand = new RelayCommand(o => ApplyTimeFilter());
+            ResetZoomCommand = new RelayCommand(o => ResetZoom());
             ZoomToStateCommand = new RelayCommand(ZoomToState);
 
             StepTimeCommand = new RelayCommand(param =>
@@ -169,15 +156,35 @@ namespace IndiLogs_3._0.ViewModels
                 {
                     DateTime newStart = FilterStartTime;
                     DateTime newEnd = FilterEndTime;
-                    if (args[0].ToString() == "Start") newStart = newStart.AddSeconds(seconds);
-                    else newEnd = newEnd.AddSeconds(seconds);
+
+                    if (args[0].ToString() == "Start")
+                    {
+                        newStart = newStart.AddSeconds(seconds);
+                        if (newStart >= FilterEndTime) newStart = FilterEndTime.AddSeconds(-1);
+                    }
+                    else
+                    {
+                        newEnd = newEnd.AddSeconds(seconds);
+                        if (newEnd <= FilterStartTime) newEnd = FilterStartTime.AddSeconds(1);
+                    }
 
                     if (_isLockedToState)
                     {
                         if (newStart < _absoluteMinTime) newStart = _absoluteMinTime;
+                        if (newStart > _absoluteMaxTime) newStart = _absoluteMaxTime;
+                        if (newEnd < _absoluteMinTime) newEnd = _absoluteMinTime;
                         if (newEnd > _absoluteMaxTime) newEnd = _absoluteMaxTime;
                     }
-                    UpdateGraphsView(newStart, newEnd);
+                    else
+                    {
+                        if (newStart < _logStartTime) newStart = _logStartTime;
+                        if (newStart > _logEndTime) newStart = _logEndTime;
+                        if (newEnd < _logStartTime) newEnd = _logStartTime;
+                        if (newEnd > _logEndTime) newEnd = _logEndTime;
+                    }
+
+                    FilterStartTime = newStart;
+                    FilterEndTime = newEnd;
                 }
             });
 
@@ -189,20 +196,40 @@ namespace IndiLogs_3._0.ViewModels
             AddChart();
         }
 
-        // --- Playback Logic ---
+        // FIXED: Start playback from current view position
         private void StartPlayback()
         {
-            if (_allActiveCharts.Count == 0) return;
+            if (_allActiveCharts.Count == 0 || _allData == null || _allData.Count == 0)
+            {
+                Status = "No data to play";
+                return;
+            }
+
+            // Sync FilterStart/End with actual axis positions BEFORE starting
+            var firstChart = _allActiveCharts.FirstOrDefault();
+            if (firstChart != null)
+            {
+                var xAxis = firstChart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (xAxis != null)
+                {
+                    FilterStartTime = DateTimeAxis.ToDateTime(xAxis.ActualMinimum);
+                    FilterEndTime = DateTimeAxis.ToDateTime(xAxis.ActualMaximum);
+                }
+            }
+
             IsPlaying = true;
             _playbackTimer.Start();
+            Status = $"Playing from {FilterStartTime:HH:mm:ss}...";
         }
 
         private void StopPlayback()
         {
             IsPlaying = false;
             _playbackTimer.Stop();
+            Status = "Paused";
         }
 
+        // Playback animation
         private void OnPlaybackTick(object sender, EventArgs e)
         {
             double stepSeconds = 0.5 * PlaybackSpeed;
@@ -221,13 +248,60 @@ namespace IndiLogs_3._0.ViewModels
                 if (newEnd > limitEnd) newEnd = limitEnd;
             }
 
-            UpdateGraphsView(newStart, newEnd);
+            FilterStartTime = newStart;
+            FilterEndTime = newEnd;
+
+            double min = DateTimeAxis.ToDouble(newStart);
+            double max = DateTimeAxis.ToDouble(newEnd);
+
+            foreach (var chart in _allActiveCharts)
+            {
+                var xAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (xAxis != null) xAxis.Zoom(min, max);
+
+                AutoZoomYAxis(chart, min, max);
+                chart.Model.InvalidatePlot(true);
+            }
         }
 
-        // --- View Logic ---
+        private void ResetZoom()
+        {
+            _isLockedToState = false;
+
+            foreach (var chart in _allActiveCharts)
+            {
+                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (ax != null)
+                {
+                    ax.AbsoluteMinimum = double.NaN;
+                    ax.AbsoluteMaximum = double.NaN;
+                }
+            }
+
+            FilterStartTime = _logStartTime;
+            FilterEndTime = _logEndTime;
+
+            UpdateGraphsView(_logStartTime, _logEndTime);
+
+            Status = "View reset to full log";
+        }
+
+        private void ApplyTimeFilter()
+        {
+            if (FilterStartTime >= FilterEndTime)
+            {
+                Status = "Invalid time range";
+                return;
+            }
+
+            UpdateGraphsView(FilterStartTime, FilterEndTime);
+            Status = $"View: {FilterStartTime:HH:mm:ss} → {FilterEndTime:HH:mm:ss}";
+        }
+
         public void UpdateGraphsView(DateTime start, DateTime end)
         {
             if (start >= end) return;
+
             FilterStartTime = start;
             FilterEndTime = end;
 
@@ -236,12 +310,49 @@ namespace IndiLogs_3._0.ViewModels
 
             foreach (var chart in _allActiveCharts)
             {
-                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (ax != null)
+                var xAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (xAxis != null) xAxis.Zoom(min, max);
+
+                AutoZoomYAxis(chart, min, max);
+                chart.Model.InvalidatePlot(true);
+            }
+        }
+
+        // Auto Y-axis zoom to visible data
+        private void AutoZoomYAxis(SingleChartViewModel chart, double minX, double maxX)
+        {
+            var yAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "Y");
+            if (yAxis == null || chart.Model.Series.Count == 0) return;
+
+            double yMin = double.MaxValue;
+            double yMax = double.MinValue;
+            bool foundData = false;
+
+            foreach (var series in chart.Model.Series.OfType<LineSeries>())
+            {
+                var visiblePoints = series.Points.Where(p => p.X >= minX && p.X <= maxX).ToList();
+
+                if (visiblePoints.Any())
                 {
-                    ax.Zoom(min, max);
-                    chart.Model.InvalidatePlot(false);
+                    foundData = true;
+                    var minY = visiblePoints.Min(p => p.Y);
+                    var maxY = visiblePoints.Max(p => p.Y);
+
+                    if (minY < yMin) yMin = minY;
+                    if (maxY > yMax) yMax = maxY;
                 }
+            }
+
+            if (foundData && yMin != double.MaxValue && yMax != double.MinValue)
+            {
+                double padding = (yMax - yMin) * 0.1;
+                if (padding == 0 || double.IsNaN(padding)) padding = 1.0;
+
+                yAxis.Zoom(yMin - padding, yMax + padding);
+            }
+            else
+            {
+                yAxis.Reset();
             }
         }
 
@@ -263,22 +374,12 @@ namespace IndiLogs_3._0.ViewModels
                     ax.AbsoluteMaximum = absMax;
                 }
             }
-            UpdateGraphsView(start, end);
-        }
 
-        private void UnlockAndReset()
-        {
-            _isLockedToState = false;
-            foreach (var chart in _allActiveCharts)
-            {
-                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (ax != null)
-                {
-                    ax.AbsoluteMinimum = double.NaN;
-                    ax.AbsoluteMaximum = double.NaN;
-                }
-            }
-            UpdateGraphsView(_logStartTime, _logEndTime);
+            FilterStartTime = start;
+            FilterEndTime = end;
+            UpdateGraphsView(start, end);
+
+            Status = $"Locked to state bounds: {start:HH:mm:ss} → {end:HH:mm:ss}";
         }
 
         private void ZoomToState(object param)
@@ -297,6 +398,15 @@ namespace IndiLogs_3._0.ViewModels
             double newMin = sourceAxis.ActualMinimum;
             double newMax = sourceAxis.ActualMaximum;
 
+            if (_isLockedToState)
+            {
+                double absMin = DateTimeAxis.ToDouble(_absoluteMinTime);
+                double absMax = DateTimeAxis.ToDouble(_absoluteMaxTime);
+
+                if (newMin < absMin) newMin = absMin;
+                if (newMax > absMax) newMax = absMax;
+            }
+
             if (newMax > newMin)
             {
                 try
@@ -312,6 +422,7 @@ namespace IndiLogs_3._0.ViewModels
                     if (ax != null && ax != sourceAxis)
                     {
                         ax.Zoom(newMin, newMax);
+                        AutoZoomYAxis(chart, newMin, newMax);
                         chart.Model.InvalidatePlot(false);
                     }
                 }
@@ -319,7 +430,6 @@ namespace IndiLogs_3._0.ViewModels
             _isSyncing = false;
         }
 
-        // --- Crosshair ---
         private void OnPlotMouseMove(SingleChartViewModel vm, OxyMouseEventArgs e)
         {
             if (IsMeasureMode) return;
@@ -343,8 +453,7 @@ namespace IndiLogs_3._0.ViewModels
             vm.Model.InvalidatePlot(false);
         }
 
-        // --- Main Functions (Expanded) ---
-
+        // FIXED: Update charts immediately after loading log
         public async Task ProcessLogsAsync(IEnumerable<LogEntry> logs)
         {
             Status = "Processing Graph Data...";
@@ -357,7 +466,11 @@ namespace IndiLogs_3._0.ViewModels
             {
                 _logStartTime = logs.First().Date;
                 _logEndTime = logs.Last().Date;
-                UnlockAndReset();
+                FilterStartTime = _logStartTime;
+                FilterEndTime = _logEndTime;
+
+                // CRITICAL FIX: Update the charts immediately!
+                UpdateGraphsView(_logStartTime, _logEndTime);
             }
 
             StateList.Clear();
@@ -367,11 +480,10 @@ namespace IndiLogs_3._0.ViewModels
             {
                 c.Model.Annotations.Clear();
                 AddStateAnnotations(c.Model);
-                c.Model.ResetAllAxes();
             }
 
             OnPropertyChanged(nameof(ComponentTree));
-            Status = $"Ready. Loaded {_allData.Keys.Count} signals.";
+            Status = $"Ready. Loaded {_allData.Keys.Count} signals. Time range: {_logStartTime:HH:mm:ss} → {_logEndTime:HH:mm:ss}";
         }
 
         public void AddSignalToChart(string fullPath)
@@ -414,10 +526,17 @@ namespace IndiLogs_3._0.ViewModels
             series.Points.AddRange(points);
             SelectedChart.Model.Series.Add(series);
 
-            // תמיד נאפס צירים בהוספת סיגנל כדי לוודא שהוא נראה
-            SelectedChart.Model.ResetAllAxes();
-            SelectedChart.Model.InvalidatePlot(true);
+            // Update view to show the full range
+            var xAxis = SelectedChart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+            if (xAxis != null)
+            {
+                double min = DateTimeAxis.ToDouble(FilterStartTime);
+                double max = DateTimeAxis.ToDouble(FilterEndTime);
+                xAxis.Zoom(min, max);
+                AutoZoomYAxis(SelectedChart, min, max);
+            }
 
+            SelectedChart.Model.InvalidatePlot(true);
             UpdateChartTitle(SelectedChart);
         }
 
@@ -450,6 +569,7 @@ namespace IndiLogs_3._0.ViewModels
             if (yAxis != null) yAxis.AxisChanged += (s, e) => UpdateStateLabelPositions(vm);
 
             if (_allStates != null) AddStateAnnotations(vm.Model);
+
             Charts.Add(vm);
             _allActiveCharts.Add(vm);
             SelectedChart = vm;
