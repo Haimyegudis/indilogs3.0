@@ -219,27 +219,9 @@ namespace IndiLogs_3._0.ViewModels
         private void StartPlayback()
         {
             if (_allActiveCharts.Count == 0) return;
-
-            // לוגיקה חדשה: אם אנחנו לא במצב "פילטר" פעיל, או שהנגן סיים, 
-            // נעדכן את זמני הנגינה לפי מה שמוצג כרגע על המסך
-            if (_currentPlaybackTime >= FilterEndTime || _currentPlaybackTime < FilterStartTime)
-            {
-                // מנסה לקחת את הגבולות מהצ'ארט הנבחר
-                var xAxis = SelectedChart?.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (xAxis != null)
-                {
-                    // עדכון הפילטרים למה שרואים בעיניים כרגע
-                    FilterStartTime = DateTimeAxis.ToDateTime(xAxis.ActualMinimum);
-                    FilterEndTime = DateTimeAxis.ToDateTime(xAxis.ActualMaximum);
-
-                    // ולידציה שהם בתוך גבולות הלוג
-                    if (FilterStartTime < _logStartTime) FilterStartTime = _logStartTime;
-                    if (FilterEndTime > _logEndTime) FilterEndTime = _logEndTime;
-                }
-
-                // מתחילים מההתחלה של החלון הנוכחי
-                _currentPlaybackTime = FilterStartTime;
-            }
+            // אם אנחנו בסוף, נתחיל מההתחלה
+            if (_currentPlaybackTime >= FilterEndTime) _currentPlaybackTime = FilterStartTime;
+            if (_currentPlaybackTime < FilterStartTime) _currentPlaybackTime = FilterStartTime;
 
             IsPlaying = true;
             _playbackTimer.Start();

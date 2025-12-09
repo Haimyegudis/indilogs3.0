@@ -43,10 +43,7 @@
 
     <Grid Background="{DynamicResource BgDark}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/>
-            <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="220"/>
-        </Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250"/> <ColumnDefinition Width="*"/>   <ColumnDefinition Width="220"/> </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Padding="5">
             <Grid>
@@ -83,15 +80,14 @@
 
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/>
-                <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>
                 <RowDefinition Height="25"/>
             </Grid.RowDefinitions>
 
             <Border Grid.Row="0" Background="{DynamicResource BgCard}" Padding="5" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
                 <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
                     <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-
+                        
                         <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,15,5">
                             <Button Content="&lt;&lt;" Command="{Binding SpeedDownCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,2,0" ToolTip="Slower"/>
                             <ToggleButton Content="▶" IsChecked="{Binding IsPlaying}" Command="{Binding PlayCommand}" ToolTip="Play" Style="{StaticResource ModernToggleBtn}" Margin="0,0,2,0"/>

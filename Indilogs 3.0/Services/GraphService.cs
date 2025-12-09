@@ -8,216 +8,147 @@ using System.Globalization;
 using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading.Tasks;
-using System.Windows.Media;
 
 namespace IndiLogs_3._0.Services
 {
-    // מחלקת עזר לייצוג מקטע של סטייט בגרף
+    // הוסף את המאפיין הזה למחלקה MachineStateSegment בראש הקובץ GraphService.cs
     public class MachineStateSegment
     {
         public string Name { get; set; }
-        public double Start { get; set; } // Double עבור OxyPlot
-        public double End { get; set; }   // Double עבור OxyPlot
+        public double Start { get; set; } // Double לגרף
+        public double End { get; set; }   // Double לגרף
         public OxyColor Color { get; set; }
 
-        // המרה לזמן אמיתי עבור תצוגה ברשימה
-        public DateTime StartTimeValue => DateTimeAxis.ToDateTime(Start);
+        // --- תוספת: זמן אמיתי לתצוגה ברשימה ---
+        public DateTime StartTimeValue => OxyPlot.Axes.DateTimeAxis.ToDateTime(Start);
     }
 
     public class GraphService
     {
-        // Regex גנרי למציאת ערכים מספריים (מותאם לפורמט IO_Mon וגם לפורמטים כלליים Key:Value)
-        private readonly Regex _generalSignalRegex = new Regex(@"([a-zA-Z0-9_.]+)\s*[:=]\s*([-+]?[0-9]*\.?[0-9]+)", RegexOptions.Compiled);
+        private readonly Regex _ioRegex = new Regex(@"IO_Mon\s*:\s*([^,]+),\s*([^=]+)=([-+]?\d*\.?\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private readonly HashSet<string> _axisParams = new HashSet<string> { "SetP", "ActP", "SetV", "ActV", "Trq", "LagErr" };
 
-        // מילון צבעים לסטייטים נפוצים
         private readonly Dictionary<string, OxyColor> _stateColors = new Dictionary<string, OxyColor>(StringComparer.OrdinalIgnoreCase)
         {
-            { "OFF", OxyColors.Gray },
-            { "STANDBY", OxyColors.Orange },
-            { "GET_READY", OxyColors.Yellow },
-            { "DYNAMIC_READY", OxyColors.LightGreen },
-            { "PRINTING", OxyColors.Green },
-            { "Diagnostic", OxyColors.Purple },
-            { "Error", OxyColors.Red }
+            { "INIT", OxyColor.Parse("#FFE135") }, { "POWER_DISABLE", OxyColor.Parse("#FF6B6B") }, { "OFF", OxyColor.Parse("#808080") },
+            { "SERVICE", OxyColor.Parse("#8B4513") }, { "MECH_INIT", OxyColor.Parse("#FFA500") }, { "STANDBY", OxyColor.Parse("#FFFF00") },
+            { "GET_READY", OxyColor.Parse("#FFA500") }, { "READY", OxyColor.Parse("#90EE90") }, { "PRE_PRINT", OxyColor.Parse("#26C6DA") },
+            { "PRINT", OxyColor.Parse("#228B22") }, { "POST_PRINT", OxyColor.Parse("#4169E1") }, { "PAUSE", OxyColor.Parse("#FFA726") },
+            { "RECOVERY", OxyColor.Parse("#EC407A") }, { "SML_OFF", OxyColor.Parse("#C62828") }, { "DYNAMIC_READY", OxyColor.Parse("#32CD32") }
         };
 
-        public async Task<Tuple<Dictionary<string, List<DataPoint>>, ObservableCollection<GraphNode>, List<MachineStateSegment>>> ParseLogsToGraphDataAsync(IEnumerable<LogEntry> logs)
+        public async Task<(Dictionary<string, List<DataPoint>>, ObservableCollection<GraphNode>, List<MachineStateSegment>)> ParseLogsToGraphDataAsync(IEnumerable<LogEntry> logs)
         {
             return await Task.Run(() =>
             {
                 var dataStore = new Dictionary<string, List<DataPoint>>();
-                var stateSegments = new List<MachineStateSegment>();
                 var rootNodes = new ObservableCollection<GraphNode>();
+                var hierarchyHelper = new Dictionary<string, GraphNode>();
+                var stateSegments = new List<MachineStateSegment>();
 
-                if (logs == null || !logs.Any())
-                    return Tuple.Create(dataStore, rootNodes, stateSegments);
+                void AddToTree(string category, string component, string paramName, string fullKey)
+                {
+                    if (!hierarchyHelper.TryGetValue(category, out var catNode))
+                    {
+                        catNode = new GraphNode { Name = category, IsLeaf = false };
+                        hierarchyHelper[category] = catNode;
+                    }
+                    var compNode = catNode.Children.FirstOrDefault(c => c.Name == component);
+                    if (compNode == null)
+                    {
+                        compNode = new GraphNode { Name = component, IsLeaf = false };
+                        catNode.Children.Add(compNode);
+                    }
+                    if (!compNode.Children.Any(c => c.Name == paramName))
+                    {
+                        compNode.Children.Add(new GraphNode { Name = paramName, FullPath = fullKey, IsLeaf = true });
+                    }
+                }
 
-                // מיון לפי זמן
-                var sortedLogs = logs.OrderBy(l => l.Date).ToList();
+                var sortedLogs = logs.Where(l => !string.IsNullOrEmpty(l.Message)).OrderBy(l => l.Date).ToList();
+                if (sortedLogs.Count == 0) return (dataStore, rootNodes, stateSegments);
 
-                // משתנים למעקב אחרי סטייטים
                 LogEntry lastStateLog = null;
-                string currentStateName = null;
+                string currentStateName = "UNDEFINED";
 
                 foreach (var log in sortedLogs)
                 {
-                    double time = DateTimeAxis.ToDouble(log.Date);
+                    string msg = log.Message;
+                    double timeVal = DateTimeAxis.ToDouble(log.Date);
 
-                    // --- 1. זיהוי ופירסור אותות (Signals) ---
-                    var matches = _generalSignalRegex.Matches(log.Message);
-                    foreach (Match match in matches)
+                    // --- תיקון: שימוש ב-IndexOf במקום Contains עבור .NET 4.8 ---
+
+                    // 1. IO_Mon
+                    if (msg.IndexOf("IO_Mon:", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        if (match.Groups.Count == 3)
+                        var match = _ioRegex.Match(msg);
+                        if (match.Success)
                         {
-                            string key = match.Groups[1].Value.Trim();
-                            string valueStr = match.Groups[2].Value;
-
-                            // ניקוי רעשים מהמפתח אם צריך
-                            if (key.StartsWith("IO_Mon:", StringComparison.OrdinalIgnoreCase))
-                                key = key.Replace("IO_Mon:", "").Trim();
-
-                            if (double.TryParse(valueStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double value))
+                            if (double.TryParse(match.Groups[3].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
                             {
-                                AddPoint(dataStore, key, time, value);
+                                string key = $"IO_Mon.{match.Groups[1].Value.Trim()}.{match.Groups[2].Value.Trim()}";
+                                AddPoint(dataStore, key, timeVal, val);
+                                AddToTree("IO_Mon", match.Groups[1].Value.Trim(), match.Groups[2].Value.Trim(), key);
                             }
                         }
                     }
-
-                    // --- 2. זיהוי ופירסור סטייטים (States) ---
-                    // בדיקה אם זה לוג של Manager שמכיל מעבר "->"
-                    bool isManager = (log.Logger != null && log.Logger.IndexOf("Manager", StringComparison.OrdinalIgnoreCase) >= 0) ||
-                                     (log.ThreadName != null && log.ThreadName.Equals("Manager", StringComparison.OrdinalIgnoreCase));
-
-                    if (isManager && log.Message.Contains("->"))
+                    // 2. AxisMon
+                    else if (msg.IndexOf("AxisMon:", StringComparison.OrdinalIgnoreCase) >= 0)
                     {
-                        var parts = log.Message.Split(new[] { "->" }, StringSplitOptions.None);
-                        string fromStateRaw = parts[0].Replace("PlcMngr:", "").Trim();
-                        string toStateRaw = parts.Length > 1 ? parts[1].Trim() : "";
-
-                        // לוגיקה לטיפול בסטייטים חתוכים או מלאים
-                        if (!string.IsNullOrEmpty(fromStateRaw) && !string.IsNullOrEmpty(toStateRaw))
+                        var parts = msg.Split(',');
+                        if (parts.Length > 2)
                         {
-                            // מעבר רגיל: סוגרים את הסטייט הקודם ומתחילים חדש
-                            if (lastStateLog != null)
+                            string prefixPart = parts[0];
+                            string subsys = prefixPart.IndexOf(':') > 0 ? prefixPart.Split(':')[1].Trim() : prefixPart.Trim();
+                            string motor = parts[1].Trim();
+                            for (int i = 2; i < parts.Length; i++)
                             {
-                                AddStateSegment(stateSegments, currentStateName, lastStateLog.Date, log.Date);
+                                var pair = parts[i].Split('=');
+                                if (pair.Length == 2 && _axisParams.Contains(pair[0].Trim()))
+                                {
+                                    if (double.TryParse(pair[1].Trim().Split(' ')[0], NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                                    {
+                                        string key = $"AxisMon.{motor}.{pair[0].Trim()}";
+                                        AddPoint(dataStore, key, timeVal, val);
+                                        AddToTree("AxisMon", motor, pair[0].Trim(), key);
+                                    }
+                                }
                             }
-                            else if (currentStateName == null)
-                            {
-                                // מקרה קצה: לוג ראשון הוא מעבר, נניח שההתחלה הייתה ה-FROM
-                                // אופציונלי: להוסיף סגמנט התחלתי קצר
-                            }
-
-                            currentStateName = toStateRaw;
-                            lastStateLog = log;
                         }
-                        else if (string.IsNullOrEmpty(fromStateRaw) && !string.IsNullOrEmpty(toStateRaw))
+                    }
+                    // 3. State Parsing
+                    else if (log.ThreadName == "Manager" && msg.IndexOf("->") >= 0 && msg.StartsWith("PlcMngr:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        var parts = msg.Split(new[] { "->" }, StringSplitOptions.None);
+                        if (parts.Length > 1)
                         {
-                            // מקרה: "-> StateB" (התחלה חתוכה)
-                            // נסגור את מה שהיה קודם (אם היה)
-                            if (lastStateLog != null)
-                            {
-                                AddStateSegment(stateSegments, currentStateName ?? "Unknown", lastStateLog.Date, log.Date);
-                            }
-
-                            currentStateName = toStateRaw;
-                            lastStateLog = log;
-                        }
-                        else if (!string.IsNullOrEmpty(fromStateRaw) && string.IsNullOrEmpty(toStateRaw))
-                        {
-                            // מקרה: "StateA ->" (סוף חתוך)
-                            if (lastStateLog != null)
-                            {
-                                AddStateSegment(stateSegments, currentStateName, lastStateLog.Date, log.Date);
-                            }
-                            // הסטייט הבא לא ידוע כרגע
-                            currentStateName = "Transitioning...";
+                            if (lastStateLog != null) AddStateSegment(stateSegments, currentStateName, lastStateLog.Date, log.Date);
+                            currentStateName = parts[1].Trim();
                             lastStateLog = log;
                         }
                     }
                 }
 
-                // סגירת הסטייט האחרון עד סוף הלוג
                 if (lastStateLog != null && sortedLogs.Count > 0)
-                {
                     AddStateSegment(stateSegments, currentStateName, lastStateLog.Date, sortedLogs.Last().Date);
-                }
 
-                // --- 3. בניית עץ הסיגנלים (UI Tree) ---
-                var hierarchyHelper = new Dictionary<string, GraphNode>();
-                foreach (var signalKey in dataStore.Keys)
-                {
-                    BuildComponentTree(rootNodes, hierarchyHelper, signalKey);
-                }
+                foreach (var kvp in hierarchyHelper.OrderBy(k => k.Key)) rootNodes.Add(kvp.Value);
 
-                return Tuple.Create(dataStore, rootNodes, stateSegments);
+                return (dataStore, rootNodes, stateSegments);
             });
         }
 
         private void AddStateSegment(List<MachineStateSegment> list, string name, DateTime start, DateTime end)
         {
-            if (string.IsNullOrEmpty(name)) return;
-
-            // בחירת צבע
-            OxyColor color = OxyColors.LightGray; // Default
-
-            // בדיקה במילון (Case Insensitive)
-            var key = _stateColors.Keys.FirstOrDefault(k => k.Equals(name, StringComparison.OrdinalIgnoreCase));
-            if (key != null) color = _stateColors[key];
-            else if (name.Contains("Error") || name.Contains("Failure")) color = OxyColors.Red;
-
-            // שקיפות כדי לא להסתיר את הגרף
+            var color = _stateColors.ContainsKey(name) ? _stateColors[name] : OxyColors.LightGray;
             color = OxyColor.FromAColor(60, color);
-
-            list.Add(new MachineStateSegment
-            {
-                Name = name,
-                Start = DateTimeAxis.ToDouble(start),
-                End = DateTimeAxis.ToDouble(end),
-                Color = color
-            });
+            list.Add(new MachineStateSegment { Name = name, Start = DateTimeAxis.ToDouble(start), End = DateTimeAxis.ToDouble(end), Color = color });
         }
 
         private void AddPoint(Dictionary<string, List<DataPoint>> store, string key, double x, double y)
         {
             if (!store.ContainsKey(key)) store[key] = new List<DataPoint>();
-
-            // אופטימיזציה קטנה: לא להוסיף נקודה אם היא זהה לקודמת בדיוק (חוסך זיכרון)
-            // אלא אם כן עבר הרבה זמן. כאן נשמור הכל ליתר ביטחון.
             store[key].Add(new DataPoint(x, y));
-        }
-
-        private void BuildComponentTree(ObservableCollection<GraphNode> rootNodes, Dictionary<string, GraphNode> hierarchyHelper, string fullPath)
-        {
-            var parts = fullPath.Split(new[] { '.', '_' }, StringSplitOptions.RemoveEmptyEntries);
-            ObservableCollection<GraphNode> currentCollection = rootNodes;
-            string currentPath = "";
-
-            for (int i = 0; i < parts.Length; i++)
-            {
-                string part = parts[i];
-                currentPath = i == 0 ? part : currentPath + "." + part;
-                bool isLeaf = (i == parts.Length - 1);
-
-                // חיפוש האם הצומת קיים ברמה הנוכחית
-                var node = currentCollection.FirstOrDefault(n => n.Name == part);
-                if (node == null)
-                {
-                    node = new GraphNode
-                    {
-                        Name = part,
-                        FullPath = isLeaf ? fullPath : currentPath, // אם זה עלה, נשתמש במפתח המקורי
-                        IsLeaf = isLeaf,
-                        IsExpanded = false
-                    };
-                    currentCollection.Add(node);
-
-                    // שמירה במילון עזר אם צריך גישה ישירה (לא חובה ללוגיקה הבסיסית אבל עוזר)
-                    if (!hierarchyHelper.ContainsKey(currentPath)) hierarchyHelper[currentPath] = node;
-                }
-
-                currentCollection = node.Children;
-            }
         }
     }
 }
