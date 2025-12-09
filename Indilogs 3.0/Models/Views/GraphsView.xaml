@@ -10,6 +10,7 @@
     <UserControl.Resources>
         <converters:OxyColorToBrushConverter x:Key="OxyColorToBrushConverter"/>
         <converters:ArrayConverter x:Key="ArrayConverter"/>
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter"/>
 
         <Style x:Key="ModernToggleBtn" TargetType="ToggleButton">
             <Setter Property="Background" Value="{DynamicResource BgCard}"/>
@@ -43,7 +44,10 @@
 
     <Grid Background="{DynamicResource BgDark}">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/> <ColumnDefinition Width="*"/>   <ColumnDefinition Width="220"/> </Grid.ColumnDefinitions>
+            <ColumnDefinition Width="250"/>
+            <ColumnDefinition Width="*"/>
+            <ColumnDefinition Width="220"/>
+        </Grid.ColumnDefinitions>
 
         <Border Grid.Column="0" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,0,1,0" Padding="5">
             <Grid>
@@ -54,7 +58,6 @@
                 </Grid.RowDefinitions>
 
                 <TextBlock Text="Signals Explorer" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="5"/>
-
                 <TextBox Grid.Row="1" Text="{Binding TreeSearchText, UpdateSourceTrigger=PropertyChanged}" 
                          Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextPrimary}" 
                          Padding="5" Margin="0,0,0,5" BorderBrush="{DynamicResource BorderColor}" Tag="Search..."/>
@@ -80,76 +83,96 @@
 
         <Grid Grid.Column="1">
             <Grid.RowDefinitions>
-                <RowDefinition Height="Auto"/> <RowDefinition Height="*"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
                 <RowDefinition Height="25"/>
             </Grid.RowDefinitions>
 
-            <Border Grid.Row="0" Background="{DynamicResource BgCard}" Padding="5" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
-                <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto">
-                    <WrapPanel Orientation="Horizontal" VerticalAlignment="Center">
-                        
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,15,5">
-                            <Button Content="&lt;&lt;" Command="{Binding SpeedDownCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,2,0" ToolTip="Slower"/>
-                            <ToggleButton Content="▶" IsChecked="{Binding IsPlaying}" Command="{Binding PlayCommand}" ToolTip="Play" Style="{StaticResource ModernToggleBtn}" Margin="0,0,2,0"/>
-                            <Button Content="⏸" Command="{Binding PauseCommand}" ToolTip="Pause" Style="{DynamicResource ModernBtn}" Margin="0,0,2,0"/>
-                            <Button Content="&gt;&gt;" Command="{Binding SpeedUpCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,5,0" ToolTip="Faster"/>
-                            <TextBlock Text="{Binding PlaybackSpeedText}" Foreground="Gray" VerticalAlignment="Center" FontWeight="Bold" Width="40" TextAlignment="Center"/>
+            <Border Grid.Row="0" Background="{DynamicResource BgCard}" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
+                <StackPanel>
+                    <Grid Background="{DynamicResource BgPanel}" Height="20">
+                        <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="5,0">
+                            <ToggleButton IsChecked="{Binding IsToolbarPinned}" Content="📌" 
+                                           Style="{StaticResource ModernToggleBtn}" Width="25" Height="18" Padding="0" 
+                                           ToolTip="Pin Toolbar"/>
+                            <ToggleButton IsChecked="{Binding IsToolbarVisible}" Content="Show Tools" 
+                                          FontSize="10" Style="{StaticResource ModernToggleBtn}" Height="18" Padding="5,0"
+                                          Visibility="{Binding IsToolbarPinned, Converter={StaticResource BooleanToVisibilityConverter}, ConverterParameter=Inverted}"/>
                         </StackPanel>
+                    </Grid>
 
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,15,5">
-                            <ToggleButton Content="📏 Measure" ToolTip="Ctrl+Click on chart to measure" IsChecked="{Binding IsMeasureMode}" Style="{StaticResource ModernToggleBtn}" Margin="0,0,15,0"/>
+                    <ScrollViewer VerticalScrollBarVisibility="Disabled" HorizontalScrollBarVisibility="Auto" 
+                                  Visibility="{Binding IsToolbarVisible, Converter={StaticResource BooleanToVisibilityConverter}}">
+                        <WrapPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="5">
 
-                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Background="#DDD" Margin="0,0,5,0">
-                                <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                    <RepeatButton.CommandParameter>
-                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                            <Binding Source="Start"/>
-                                            <Binding Source="-60"/>
-                                        </MultiBinding>
-                                    </RepeatButton.CommandParameter>
-                                </RepeatButton>
-                                <TextBox Text="{Binding FilterStartTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="Black" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
-                                <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                    <RepeatButton.CommandParameter>
-                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                            <Binding Source="Start"/>
-                                            <Binding Source="60"/>
-                                        </MultiBinding>
-                                    </RepeatButton.CommandParameter>
-                                </RepeatButton>
+                            <Border BorderBrush="#444" BorderThickness="1" CornerRadius="3" Margin="0,0,10,0" Padding="5,2">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Button Content="&lt;&lt;" Command="{Binding SpeedDownCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,2,0" ToolTip="Slower"/>
+                                    <ToggleButton Content="▶" IsChecked="{Binding IsPlaying}" Command="{Binding PlayCommand}" ToolTip="Play (Entire Log or Selection)" Style="{StaticResource ModernToggleBtn}" Margin="0,0,2,0"/>
+                                    <Button Content="⏸" Command="{Binding PauseCommand}" ToolTip="Pause" Style="{DynamicResource ModernBtn}" Margin="0,0,2,0"/>
+                                    <Button Content="&gt;&gt;" Command="{Binding SpeedUpCommand}" Style="{DynamicResource ModernBtn}" Padding="5,0" Margin="0,0,5,0" ToolTip="Faster"/>
+                                    <TextBlock Text="{Binding PlaybackSpeedText}" Foreground="Gray" VerticalAlignment="Center" FontWeight="Bold" Width="40" TextAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
 
-                                <TextBlock Text=" ➜ " Foreground="Black" VerticalAlignment="Center" Margin="5,0"/>
+                            <Border BorderBrush="#444" BorderThickness="1" CornerRadius="3" Margin="0,0,10,0" Padding="5,2">
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center" FlowDirection="RightToLeft">
 
-                                <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                    <RepeatButton.CommandParameter>
-                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                            <Binding Source="End"/>
-                                            <Binding Source="-60"/>
-                                        </MultiBinding>
-                                    </RepeatButton.CommandParameter>
-                                </RepeatButton>
-                                <TextBox Text="{Binding FilterEndTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="Black" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
-                                <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
-                                    <RepeatButton.CommandParameter>
-                                        <MultiBinding Converter="{StaticResource ArrayConverter}">
-                                            <Binding Source="End"/>
-                                            <Binding Source="60"/>
-                                        </MultiBinding>
-                                    </RepeatButton.CommandParameter>
-                                </RepeatButton>
+                                    <TextBlock Text="Start:" VerticalAlignment="Center" Margin="5,0" FontWeight="Bold"/>
+                                    <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="Start"/>
+                                                <Binding Source="60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+                                    <TextBox Text="{Binding FilterStartTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="Start"/>
+                                                <Binding Source="-60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+
+                                    <TextBlock Text=" ➜ " Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="10,0"/>
+
+                                    <TextBlock Text="End:" VerticalAlignment="Center" Margin="5,0" FontWeight="Bold"/>
+                                    <RepeatButton Content="+" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="End"/>
+                                                <Binding Source="60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+                                    <TextBox Text="{Binding FilterEndTime, StringFormat='HH:mm:ss'}" Width="60" TextAlignment="Center" IsReadOnly="True" Background="Transparent" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" VerticalAlignment="Center" FontWeight="Bold"/>
+                                    <RepeatButton Content="-" Command="{Binding StepTimeCommand}" Width="20" Height="20" Delay="500" Interval="100">
+                                        <RepeatButton.CommandParameter>
+                                            <MultiBinding Converter="{StaticResource ArrayConverter}">
+                                                <Binding Source="End"/>
+                                                <Binding Source="-60"/>
+                                            </MultiBinding>
+                                        </RepeatButton.CommandParameter>
+                                    </RepeatButton>
+
+                                    <Button Content="Apply" Command="{Binding ApplyTimeFilterCommand}" Style="{DynamicResource ModernBtn}" Background="#3B82F6" Foreground="White" Margin="10,0,2,0" Padding="10,2"/>
+                                    <Button Content="Reset" Command="{Binding ResetZoomCommand}" Style="{DynamicResource ModernBtn}" Margin="2,0" Padding="10,2"/>
+                                </StackPanel>
+                            </Border>
+
+                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                <ToggleButton Content="📏 Measure" ToolTip="Ctrl+Click on chart to measure" IsChecked="{Binding IsMeasureMode}" Style="{StaticResource ModernToggleBtn}" Margin="0,0,10,0"/>
+                                <Button Content="➕ Chart" Command="{Binding AddChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2"/>
+                                <Button Content="➖ Chart" Command="{Binding RemoveChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2"/>
+                                <Button Content="🧹 Clear" Command="{Binding ClearChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2" Background="#444"/>
                             </StackPanel>
 
-                            <Button Content="Apply" Command="{Binding ApplyTimeFilterCommand}" Style="{DynamicResource ModernBtn}" Background="#3B82F6" Foreground="White" Margin="2,0" Padding="10,2"/>
-                            <Button Content="Reset" Command="{Binding ResetZoomCommand}" Style="{DynamicResource ModernBtn}" Margin="2,0" Padding="10,2"/>
-                        </StackPanel>
-
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Margin="0,5,0,5">
-                            <Button Content="➕ Add" Command="{Binding AddChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2"/>
-                            <Button Content="➖ Remove" Command="{Binding RemoveChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2"/>
-                            <Button Content="🧹 Clear" Command="{Binding ClearChartCommand}" Style="{DynamicResource ModernBtn}" Margin="2" Background="#444"/>
-                        </StackPanel>
-                    </WrapPanel>
-                </ScrollViewer>
+                        </WrapPanel>
+                    </ScrollViewer>
+                </StackPanel>
             </Border>
 
             <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
@@ -167,19 +190,16 @@
                                         </Style.Triggers>
                                     </Style>
                                 </Border.Style>
-
                                 <Grid>
                                     <Grid.RowDefinitions>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="*"/>
                                     </Grid.RowDefinitions>
-
                                     <DockPanel LastChildFill="False" Background="#111">
                                         <TextBlock Text="{Binding Title}" Foreground="#AAA" FontSize="11" Margin="5,2" FontWeight="Bold" DockPanel.Dock="Left"/>
                                         <Button Content="↗" Command="{Binding FloatCommand}" Width="25" Padding="0" DockPanel.Dock="Right" 
                                                 ToolTip="Detach Chart" Background="Transparent" Foreground="White" BorderThickness="0" Cursor="Hand"/>
                                     </DockPanel>
-
                                     <oxy:PlotView Grid.Row="1" Model="{Binding Model}" Controller="{Binding Controller}" Background="Transparent"/>
                                 </Grid>
                             </Border>
@@ -198,7 +218,6 @@
                     <RowDefinition Height="*"/>
                 </Grid.RowDefinitions>
                 <TextBlock Text="Transitions" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="5"/>
-
                 <ListBox Grid.Row="1" ItemsSource="{Binding StateList}" Background="Transparent" BorderThickness="0" Padding="0" ScrollViewer.HorizontalScrollBarVisibility="Disabled">
                     <ListBox.ItemContainerStyle>
                         <Style TargetType="ListBoxItem">
@@ -220,9 +239,7 @@
                                         <ColumnDefinition Width="5"/>
                                         <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
-
                                     <Rectangle Grid.Column="0" Fill="{Binding Color, Converter={StaticResource OxyColorToBrushConverter}}" Width="5" VerticalAlignment="Stretch"/>
-
                                     <StackPanel Grid.Column="1" Margin="5,0,0,0">
                                         <TextBlock Text="{Binding Name}" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" TextWrapping="Wrap" FontSize="11"/>
                                         <TextBlock Text="{Binding StartTimeValue, StringFormat='{}{0:HH:mm:ss.fff}'}" FontSize="10" Foreground="#AAA"/>

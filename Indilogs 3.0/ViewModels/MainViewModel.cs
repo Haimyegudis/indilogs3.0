@@ -1435,25 +1435,52 @@ namespace IndiLogs_3._0.ViewModels
         {
             if (obj is StateEntry state)
             {
-                IsBusy = true; StatusMessage = $"Focusing state: {state.StateName}...";
+                IsBusy = true;
+                StatusMessage = $"Focusing state: {state.StateName}...";
+
                 Task.Run(() =>
                 {
                     DateTime start = state.StartTime;
                     DateTime end = state.EndTime ?? DateTime.MaxValue;
+
+                    // --- זה החלק שהיה חסר: קריאה ל-GraphsVM לעדכון הגרף ---
+                    Application.Current.Dispatcher.Invoke(() =>
+                    {
+                        if (GraphsVM != null)
+                        {
+                            // שימוש בפונקציה החדשה שיצרנו
+                            GraphsVM.SetTimeRange(start, end);
+                        }
+                    });
+                    // -----------------------------------------------------
+
                     if (_allLogsCache != null)
                     {
                         var timeSlice = _allLogsCache.Where(l => l.Date >= start && l.Date <= end).OrderByDescending(l => l.Date).ToList();
                         var smartFiltered = timeSlice.Where(l => IsDefaultLog(l)).ToList();
+
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            _lastFilteredCache = timeSlice; _savedFilterRoot = null; _isTimeFocusActive = true; _isMainFilterActive = true;
-                            SelectedTabIndex = 0; UpdateMainLogsFilter(true);
-                            if (FilteredLogs != null) { FilteredLogs.ReplaceAll(smartFiltered); if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0]; }
+                            _lastFilteredCache = timeSlice;
+                            _savedFilterRoot = null;
+                            _isTimeFocusActive = true;
+                            _isMainFilterActive = true;
+                            SelectedTabIndex = 0;
+                            UpdateMainLogsFilter(true);
+                            if (FilteredLogs != null)
+                            {
+                                FilteredLogs.ReplaceAll(smartFiltered);
+                                if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0];
+                            }
                             OnPropertyChanged(nameof(IsFilterActive));
-                            StatusMessage = $"State: {state.StateName} | Main: {timeSlice.Count}, Filtered: {smartFiltered.Count}"; IsBusy = false;
+                            StatusMessage = $"State: {state.StateName} | Main: {timeSlice.Count}, Filtered: {smartFiltered.Count}";
+                            IsBusy = false;
                         });
                     }
-                    else IsBusy = false;
+                    else
+                    {
+                        IsBusy = false;
+                    }
                 });
             }
         }
