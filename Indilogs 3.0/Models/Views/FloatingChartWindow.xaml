@@ -1,0 +1,9 @@
+﻿<Window x:Class="IndiLogs_3._0.Views.FloatingChartWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:oxy="http://oxyplot.org/wpf"
+        Title="{Binding Title}" Height="400" Width="600" Background="{DynamicResource BgDark}">
+    <Grid>
+        <oxy:PlotView Model="{Binding Model}" Controller="{Binding Controller}" Background="Transparent"/>
+    </Grid>
+</Window>
