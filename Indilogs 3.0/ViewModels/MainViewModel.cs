@@ -5,12 +5,16 @@ using IndiLogs_3._0.Services.Analysis;
 using IndiLogs_3._0.Views;
 using Microsoft.Win32;
 using Newtonsoft.Json;
+using OxyPlot;
+using OxyPlot.Axes;
+using OxyPlot.Series;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
+using OxyPlot.Legends;
 using System.Linq;
 using System.Runtime.CompilerServices;
 using System.Text.RegularExpressions;
@@ -26,21 +30,24 @@ namespace IndiLogs_3._0.ViewModels
 {
     public class MainViewModel : INotifyPropertyChanged
     {
+        public ObservableCollection<LogEntry> MarkedAppLogs { get; set; }
         private FilterNode _mainFilterRoot = null;
         private FilterNode _appFilterRoot = null;
         private List<ColoringCondition> _mainColoringRules = new List<ColoringCondition>();
         private List<ColoringCondition> _appColoringRules = new List<ColoringCondition>();
         private List<LogEntry> _lastFilteredAppCache;
         private bool _isAppTimeFocusActive;
+        public GraphsViewModel GraphsVM { get; set; }
         // --- Services ---
         private readonly LogFileService _logService;
         private readonly LogColoringService _coloringService;
         private readonly CsvExportService _csvService;
-        public ICommand TreeShowOnlyCommand { get; }
+
         // --- Windows Instances ---
         private StatesWindow _statesWindow;
         private AnalysisReportWindow _analysisWindow;
-        private MarkedLogsWindow _markedLogsWindow;
+        private MarkedLogsWindow _markedMainLogsWindow;
+        private MarkedLogsWindow _markedAppLogsWindow;
 
         // --- הפרדת משתנים (State Separation) ---
         private bool _isMainFilterActive;
@@ -48,13 +55,14 @@ namespace IndiLogs_3._0.ViewModels
 
         private bool _isMainFilterOutActive;
         private bool _isAppFilterOutActive;
+
         // --- Timers ---
         private DispatcherTimer _searchDebounceTimer;
 
         // --- Caches ---
         private ObservableRangeCollection<LogEntry> _liveLogsCollection;
         private IList<LogEntry> _allLogsCache;              // Cache for Main Logs
-        private IList<LogEntry> _allAppLogsCache;           // Cache for AppDev Logs (NEW)
+        private IList<LogEntry> _allAppLogsCache;           // Cache for AppDev Logs
         private IList<LogEntry> _lastFilteredCache = new List<LogEntry>();
 
         // --- Filter States ---
@@ -64,7 +72,7 @@ namespace IndiLogs_3._0.ViewModels
         private FilterNode _savedFilterRoot = null;
         private bool _isTimeFocusActive = false;
 
-        // --- Tree Filter State (NEW) ---
+        // --- Tree Filter State (NEW LOGIC) ---
         private LoggerNode _selectedTreeItem;
         public LoggerNode SelectedTreeItem
         {
@@ -72,10 +80,14 @@ namespace IndiLogs_3._0.ViewModels
             set { _selectedTreeItem = value; OnPropertyChanged(); }
         }
 
+        // HashSet ללוגרים ספציפיים שמוסתרים (ללא ילדים)
         private HashSet<string> _treeHiddenLoggers = new HashSet<string>();
+        // HashSet לענפים שלמים שמוסתרים (Prefix)
         private HashSet<string> _treeHiddenPrefixes = new HashSet<string>();
-        private string _treeShowOnlyLogger = null;
-        private string _treeShowOnlyPrefix = null;
+
+        // מצבי "הצג רק את..." (Isolation Mode)
+        private string _treeShowOnlyLogger = null; // מצב 3: Show Only This Logger
+        private string _treeShowOnlyPrefix = null; // מצב 4: Show This Logger With Children
 
         // --- Live Monitoring Variables ---
         private CancellationTokenSource _liveCts;
@@ -95,7 +107,7 @@ namespace IndiLogs_3._0.ViewModels
         }
         public ObservableRangeCollection<LogEntry> FilteredLogs { get; set; }
 
-        // APP Tab (NEW)
+        // APP Tab
         private ObservableRangeCollection<LogEntry> _appDevLogsFiltered;
         public ObservableRangeCollection<LogEntry> AppDevLogsFiltered
         {
@@ -103,7 +115,7 @@ namespace IndiLogs_3._0.ViewModels
             set { _appDevLogsFiltered = value; OnPropertyChanged(); }
         }
 
-        // Tree (NEW)
+        // Tree
         public ObservableCollection<LoggerNode> LoggerTreeRoot { get; set; }
 
         // Other Tabs
@@ -135,7 +147,39 @@ namespace IndiLogs_3._0.ViewModels
                 }
             }
         }
+        private bool _isMarkedLogsCombined;
+        public bool IsMarkedLogsCombined
+        {
+            get => _isMarkedLogsCombined;
+            set
+            {
+                if (_isMarkedLogsCombined != value)
+                {
+                    _isMarkedLogsCombined = value;
+                    OnPropertyChanged();
+                    // אופציונלי: סגירת חלונות קיימים בעת שינוי המצב כדי למנוע בלבול
+                    CloseAllMarkedWindows();
+                }
+            }
+        }
+        public class GraphComponentItem : INotifyPropertyChanged
+        {
+            public string Name { get; set; }
+            public string FullKey { get; set; }
+            private bool _isSelected;
+            public bool IsSelected
+            {
+                get => _isSelected;
+                set { _isSelected = value; OnPropertyChanged(); SelectionChanged?.Invoke(); }
+            }
+            public Action SelectionChanged { get; set; }
+            public event PropertyChangedEventHandler PropertyChanged;
+            protected void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+        }
+      
 
+        // משתנה לחלון המאוחד
+        private MarkedLogsWindow _combinedMarkedWindow;
         private int _leftTabIndex;
         public int LeftTabIndex
         {
@@ -234,21 +278,18 @@ namespace IndiLogs_3._0.ViewModels
         {
             get
             {
-                // אם אנחנו ב-APP, מחזירים את הסטטוס של APP
                 if (SelectedTabIndex == 2) return _isAppFilterActive;
-                // אחרת, מחזירים את הסטטוס של LOGS
                 return _isMainFilterActive;
             }
             set
             {
-                // כשלוחצים על הצ'קבוקס, מעדכנים רק את המשתנה של הטאב הנוכחי
                 if (SelectedTabIndex == 2)
                 {
                     if (_isAppFilterActive != value)
                     {
                         _isAppFilterActive = value;
                         OnPropertyChanged();
-                        ApplyAppLogsFilter(); // רענון APP בלבד
+                        ApplyAppLogsFilter();
                     }
                 }
                 else
@@ -257,7 +298,7 @@ namespace IndiLogs_3._0.ViewModels
                     {
                         _isMainFilterActive = value;
                         OnPropertyChanged();
-                        UpdateMainLogsFilter(_isMainFilterActive); // רענון MAIN בלבד
+                        UpdateMainLogsFilter(_isMainFilterActive);
                     }
                 }
             }
@@ -288,7 +329,7 @@ namespace IndiLogs_3._0.ViewModels
                     {
                         _isMainFilterOutActive = value;
                         OnPropertyChanged();
-                        UpdateMainLogsFilter(_isMainFilterActive); // FilterOut משפיע על הפילטר הראשי
+                        UpdateMainLogsFilter(_isMainFilterActive);
                     }
                 }
             }
@@ -403,22 +444,27 @@ namespace IndiLogs_3._0.ViewModels
         public ICommand LiveClearCommand { get; }
 
         // Tree Commands (NEW)
-        public ICommand TreeShowWithChildrenCommand { get; }
-        public ICommand TreeHideCommand { get; }
-        public ICommand TreeHideWithChildrenCommand { get; }
-        public ICommand TreeShowAllCommand { get; }
-
+        public ICommand TreeShowThisCommand { get; }            // 1
+        public ICommand TreeHideThisCommand { get; }            // 2
+        public ICommand TreeShowOnlyThisCommand { get; }        // 3
+        public ICommand TreeShowWithChildrenCommand { get; }    // 4
+        public ICommand TreeHideWithChildrenCommand { get; }    // 5
+        public ICommand TreeShowAllCommand { get; }             // Reset
 
         public MainViewModel()
         {
             _csvService = new CsvExportService();
             _logService = new LogFileService();
             _coloringService = new LogColoringService();
-            TreeShowOnlyCommand = new RelayCommand(ExecuteTreeShowOnly);
+            GraphsVM = new GraphsViewModel();
+            // Tree Commands Initialization
+            TreeShowThisCommand = new RelayCommand(ExecuteTreeShowThis);
+            TreeHideThisCommand = new RelayCommand(ExecuteTreeHideThis);
+            TreeShowOnlyThisCommand = new RelayCommand(ExecuteTreeShowOnlyThis);
             TreeShowWithChildrenCommand = new RelayCommand(ExecuteTreeShowWithChildren);
-            TreeHideCommand = new RelayCommand(ExecuteTreeHide);
             TreeHideWithChildrenCommand = new RelayCommand(ExecuteTreeHideWithChildren);
             TreeShowAllCommand = new RelayCommand(ExecuteTreeShowAll);
+
             _allLogsCache = new List<LogEntry>();
             Logs = new List<LogEntry>();
             LoadedSessions = new ObservableCollection<LogSessionData>();
@@ -433,7 +479,7 @@ namespace IndiLogs_3._0.ViewModels
             LoadedFiles = new ObservableCollection<string>();
             SavedConfigs = new ObservableCollection<SavedConfiguration>();
             MarkedLogs = new ObservableCollection<LogEntry>();
-
+            MarkedAppLogs = new ObservableCollection<LogEntry>();
             AvailableFonts = new ObservableCollection<string>();
             if (Fonts.SystemFontFamilies != null)
                 foreach (var font in Fonts.SystemFontFamilies.OrderBy(f => f.Source)) AvailableFonts.Add(font.Source);
@@ -490,7 +536,7 @@ namespace IndiLogs_3._0.ViewModels
                     ScreenshotZoom = Math.Min(5000, ScreenshotZoom + 100);
                 else
                     GridFontSize = Math.Min(30, GridFontSize + 1);
-            }); 
+            });
             ZoomOutCommand = new RelayCommand(o =>
             {
                 if (SelectedTabIndex == 4)
@@ -502,13 +548,6 @@ namespace IndiLogs_3._0.ViewModels
             LivePlayCommand = new RelayCommand(LivePlay);
             LivePauseCommand = new RelayCommand(LivePause);
             LiveClearCommand = new RelayCommand(LiveClear);
-
-            // New Tree Commands
-            TreeShowOnlyCommand = new RelayCommand(ExecuteTreeShowOnly);
-            TreeShowWithChildrenCommand = new RelayCommand(ExecuteTreeShowWithChildren);
-            TreeHideCommand = new RelayCommand(ExecuteTreeHide);
-            TreeHideWithChildrenCommand = new RelayCommand(ExecuteTreeHideWithChildren);
-            TreeShowAllCommand = new RelayCommand(ExecuteTreeShowAll);
 
             ApplyTheme(false);
             LoadSavedConfigurations();
@@ -533,15 +572,21 @@ namespace IndiLogs_3._0.ViewModels
                     _selectedTabIndex = value;
                     OnPropertyChanged();
 
-                    // לוגיקה למעבר טאב שמאלי אוטומטי (מה שביקשת קודם)
-                    if (_selectedTabIndex == 2) LeftTabIndex = 1;
+                    if (_selectedTabIndex == 2)
+                    {
+                        LeftTabIndex = 1; // LOGGERS
+                    }
+                    else if (_selectedTabIndex == 0 || _selectedTabIndex == 1)
+                    {
+                        LeftTabIndex = 0; // EXPLORER
+                    }
 
-                    // רענון ויזואלי של הצ'קבוקסים בהתאם לטאב החדש
                     OnPropertyChanged(nameof(IsFilterActive));
                     OnPropertyChanged(nameof(IsFilterOutActive));
                 }
             }
         }
+
         private void SwitchToSession(LogSessionData session)
         {
             _isMainFilterActive = false;
@@ -555,7 +600,6 @@ namespace IndiLogs_3._0.ViewModels
             _allLogsCache = session.Logs;
             Logs = session.Logs;
 
-            // Default filtering for "Filtered Logs" tab
             var defaultFilteredLogs = session.Logs.Where(l => IsDefaultLog(l)).ToList();
             FilteredLogs.ReplaceAll(defaultFilteredLogs);
             if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0];
@@ -576,37 +620,35 @@ namespace IndiLogs_3._0.ViewModels
             _allAppLogsCache = session.AppDevLogs ?? new List<LogEntry>();
             BuildLoggerTree(_allAppLogsCache);
 
-            // --- איפוס מלא של כל המצבים והפילטרים ---
             SearchText = "";
             IsFilterActive = false;
             IsFilterOutActive = false;
             _isTimeFocusActive = false;
-            _isAppTimeFocusActive = false; // איפוס פוקוס זמן APP
+            _isAppTimeFocusActive = false;
 
             _negativeFilters.Clear();
             _activeThreadFilters.Clear();
 
-            // --- התיקון: איפוס עצי הפילטרים ---
             _mainFilterRoot = null;
             _appFilterRoot = null;
             _lastFilteredAppCache = null;
             _lastFilteredCache.Clear();
 
-            // רענון סופי
+            // איפוס עץ
+            ResetTreeFilters();
+
             ApplyAppLogsFilter();
             IsBusy = false;
         }
-        // --- TREE BUILDING & FILTERING LOGIC (NEW) ---
 
-        // FIX: Changed parameter from List<LogEntry> to IEnumerable<LogEntry> to avoid CS1503
+        // --- TREE BUILDING & COMMANDS ---
+
         private void BuildLoggerTree(IEnumerable<LogEntry> logs)
         {
             LoggerTreeRoot.Clear();
             if (logs == null || !logs.Any()) return;
 
-            // Calculate total count
             int totalCount = logs.Count();
-
             var rootNode = new LoggerNode { Name = "All Loggers", FullPath = "", IsExpanded = true, Count = totalCount };
 
             var loggerGroups = logs.GroupBy(l => l.Logger)
@@ -637,7 +679,6 @@ namespace IndiLogs_3._0.ViewModels
             if (child == null)
             {
                 child = new LoggerNode { Name = part, FullPath = newPath };
-                // Sorted insertion
                 int insertIdx = 0;
                 while (insertIdx < parent.Children.Count && string.Compare(parent.Children[insertIdx].Name, part) < 0)
                     insertIdx++;
@@ -648,59 +689,119 @@ namespace IndiLogs_3._0.ViewModels
             AddNodeRecursive(child, parts, index + 1, newPath, count);
         }
 
-        private void ExecuteTreeShowOnly(object obj)
+        // 1. Show This Logger
+        private void ExecuteTreeShowThis(object obj)
+        {
+            if (obj is LoggerNode node)
+            {
+                _treeShowOnlyLogger = null;
+                _treeShowOnlyPrefix = null;
+
+                _treeHiddenLoggers.Remove(node.FullPath);
+                node.IsHidden = false;
+
+                // עדכון פילטר אוטומטי (App)
+                _isAppFilterActive = true;
+                OnPropertyChanged(nameof(IsFilterActive));
+                ToggleFilterView(true);
+            }
+        }
+
+        // 2. Hide This Logger
+        private void ExecuteTreeHideThis(object obj)
+        {
+            if (obj is LoggerNode node)
+            {
+                _treeShowOnlyLogger = null;
+                _treeShowOnlyPrefix = null;
+
+                _treeHiddenLoggers.Add(node.FullPath);
+                node.IsHidden = true;
+
+                _isAppFilterActive = true;
+                OnPropertyChanged(nameof(IsFilterActive));
+                ToggleFilterView(true);
+            }
+        }
+
+        // 3. Show Only This Logger (Isolate)
+        private void ExecuteTreeShowOnlyThis(object obj)
         {
             if (obj is LoggerNode node)
             {
                 ResetTreeFilters();
                 _treeShowOnlyLogger = node.FullPath;
-                ToggleFilterView(IsFilterActive);
+
+                _isAppFilterActive = true;
+                OnPropertyChanged(nameof(IsFilterActive));
+                ToggleFilterView(true);
             }
         }
 
+        // 4. Show With Children (Branch Isolate)
         private void ExecuteTreeShowWithChildren(object obj)
         {
             if (obj is LoggerNode node)
             {
                 ResetTreeFilters();
                 _treeShowOnlyPrefix = node.FullPath;
-                ToggleFilterView(IsFilterActive);
-            }
-        }
-        private void ViewLogDetails(object parameter)
-        {
-            if (parameter is LogEntry log)
-            {
-                new LogDetailsWindow(log).Show();
-            }
-        }
-        // הוסף את זה למחלקה MainViewModel
-        public void HandleExternalArguments(string[] args)
-        {
-            if (args != null && args.Length > 0)
-            {
-                OnFilesDropped(args);
-            }
-        }
-        private void ExecuteTreeHide(object obj)
-        {
-            if (obj is LoggerNode node)
-            {
-                _treeShowOnlyLogger = null; _treeShowOnlyPrefix = null;
-                _treeHiddenLoggers.Add(node.FullPath);
-                ToggleFilterView(IsFilterActive);
+
+                _isAppFilterActive = true;
+                OnPropertyChanged(nameof(IsFilterActive));
+                ToggleFilterView(true);
             }
         }
 
+        // 5. Hide With Children (Branch Hide)
         private void ExecuteTreeHideWithChildren(object obj)
         {
             if (obj is LoggerNode node)
             {
-                _treeShowOnlyLogger = null; _treeShowOnlyPrefix = null;
+                _treeShowOnlyLogger = null;
+                _treeShowOnlyPrefix = null;
+
                 _treeHiddenPrefixes.Add(node.FullPath);
-                ToggleFilterView(IsFilterActive);
+                node.IsHidden = true; // Visual indicator on parent
+
+                _isAppFilterActive = true;
+                OnPropertyChanged(nameof(IsFilterActive));
+                ToggleFilterView(true);
             }
         }
+
+        private void ExecuteTreeShowAll(object obj)
+        {
+            ResetTreeFilters();
+            _isAppFilterActive = false; // Reset filter state
+            OnPropertyChanged(nameof(IsFilterActive));
+            ToggleFilterView(false);
+        }
+
+        private void ResetTreeFilters()
+        {
+            _treeHiddenLoggers.Clear();
+            _treeHiddenPrefixes.Clear();
+            _treeShowOnlyLogger = null;
+            _treeShowOnlyPrefix = null;
+            foreach (var node in LoggerTreeRoot) ResetVisualHiddenState(node);
+        }
+
+        private void ResetVisualHiddenState(LoggerNode node)
+        {
+            node.IsHidden = false;
+            foreach (var child in node.Children) ResetVisualHiddenState(child);
+        }
+
+        private void ViewLogDetails(object parameter)
+        {
+            if (parameter is LogEntry log) new LogDetailsWindow(log).Show();
+        }
+
+        public void HandleExternalArguments(string[] args)
+        {
+            if (args != null && args.Length > 0) OnFilesDropped(args);
+        }
+
         public async void SortAppLogs(string sortBy, bool ascending)
         {
             if (AppDevLogsFiltered == null || AppDevLogsFiltered.Count == 0) return;
@@ -711,25 +812,15 @@ namespace IndiLogs_3._0.ViewModels
             await Task.Run(() =>
             {
                 List<LogEntry> sorted = null;
-                var source = AppDevLogsFiltered.ToList(); // עותק מקומי
+                var source = AppDevLogsFiltered.ToList();
 
                 switch (sortBy)
                 {
-                    case "Time":
-                        sorted = ascending ? source.OrderBy(x => x.Date).ToList() : source.OrderByDescending(x => x.Date).ToList();
-                        break;
-                    case "Level":
-                        sorted = ascending ? source.OrderBy(x => x.Level).ToList() : source.OrderByDescending(x => x.Level).ToList();
-                        break;
-                    case "Logger":
-                        sorted = ascending ? source.OrderBy(x => x.Logger).ToList() : source.OrderByDescending(x => x.Logger).ToList();
-                        break;
-                    case "Thread":
-                        sorted = ascending ? source.OrderBy(x => x.ThreadName).ToList() : source.OrderByDescending(x => x.ThreadName).ToList();
-                        break;
-                    default:
-                        sorted = source;
-                        break;
+                    case "Time": sorted = ascending ? source.OrderBy(x => x.Date).ToList() : source.OrderByDescending(x => x.Date).ToList(); break;
+                    case "Level": sorted = ascending ? source.OrderBy(x => x.Level).ToList() : source.OrderByDescending(x => x.Level).ToList(); break;
+                    case "Logger": sorted = ascending ? source.OrderBy(x => x.Logger).ToList() : source.OrderByDescending(x => x.Logger).ToList(); break;
+                    case "Thread": sorted = ascending ? source.OrderBy(x => x.ThreadName).ToList() : source.OrderByDescending(x => x.ThreadName).ToList(); break;
+                    default: sorted = source; break;
                 }
 
                 Application.Current.Dispatcher.Invoke(() =>
@@ -740,34 +831,17 @@ namespace IndiLogs_3._0.ViewModels
                 });
             });
         }
-        private void ExecuteTreeShowAll(object obj)
-        {
-            ResetTreeFilters();
-            ToggleFilterView(IsFilterActive);
-        }
-
-        private void ResetTreeFilters()
-        {
-            _treeHiddenLoggers.Clear();
-            _treeHiddenPrefixes.Clear();
-            _treeShowOnlyLogger = null;
-            _treeShowOnlyPrefix = null;
-        }
 
         // --- UNIFIED FILTERING LOGIC ---
 
         private void ToggleFilterView(bool show)
         {
-            // Update Main Logs Tab
             UpdateMainLogsFilter(show);
-
-            // Update APP Tab
             ApplyAppLogsFilter();
         }
 
         private void UpdateMainLogsFilter(bool show)
         {
-            // שים לב: הפרמטר 'show' מגיע מהקריאה, אבל עדיף להסתמך על _isMainFilterActive ליתר ביטחון
             bool isActive = _isMainFilterActive;
             IEnumerable<LogEntry> currentLogs;
             bool hasSearchText = !string.IsNullOrWhiteSpace(SearchText) && SearchText.Length >= 2;
@@ -790,7 +864,6 @@ namespace IndiLogs_3._0.ViewModels
                 currentLogs = _allLogsCache;
             }
 
-            // שימוש ב-_isMainFilterOutActive
             if (_isMainFilterOutActive && _negativeFilters.Any())
             {
                 currentLogs = currentLogs.Where(l =>
@@ -812,11 +885,11 @@ namespace IndiLogs_3._0.ViewModels
 
             Logs = currentLogs.ToList();
         }
+
         private void ApplyAppLogsFilter()
         {
             if (_allAppLogsCache == null) return;
 
-            // שימוש במשתנה הספציפי ל-APP (_isAppFilterActive)
             if (!_isAppFilterActive && string.IsNullOrWhiteSpace(SearchText))
             {
                 AppDevLogsFiltered.ReplaceAll(_allAppLogsCache);
@@ -824,8 +897,6 @@ namespace IndiLogs_3._0.ViewModels
             }
 
             var source = _allAppLogsCache;
-
-            // בדיקת פוקוס זמן ספציפית ל-APP + בדיקת פילטר פעיל של APP
             if (_isAppFilterActive && _isAppTimeFocusActive && _lastFilteredAppCache != null)
             {
                 source = _lastFilteredAppCache;
@@ -833,36 +904,50 @@ namespace IndiLogs_3._0.ViewModels
 
             var query = source.AsParallel().AsOrdered();
 
-            // פילטר מתקדם (רק אם פילטר פעיל ב-APP)
+            // 1. Advanced Filter
             if (_isAppFilterActive && !_isAppTimeFocusActive && _appFilterRoot != null && _appFilterRoot.Children.Count > 0)
             {
                 query = query.Where(l => EvaluateFilterNode(l, _appFilterRoot));
             }
 
-            // פילטר עץ (Tree) - מותנה בפילטר פעיל של APP
+            // 2. Tree Filter (Logic Updated)
             if (_isAppFilterActive)
             {
                 if (_treeShowOnlyLogger != null)
+                {
                     query = query.Where(l => l.Logger == _treeShowOnlyLogger);
+                }
                 else if (_treeShowOnlyPrefix != null)
+                {
                     query = query.Where(l => l.Logger != null && (l.Logger == _treeShowOnlyPrefix || l.Logger.StartsWith(_treeShowOnlyPrefix + ".")));
+                }
                 else
                 {
-                    if (_treeHiddenLoggers.Count > 0)
-                        query = query.Where(l => !_treeHiddenLoggers.Contains(l.Logger));
-                    if (_treeHiddenPrefixes.Count > 0)
-                        query = query.Where(l => !_treeHiddenPrefixes.Any(p => l.Logger.StartsWith(p)));
+                    if (_treeHiddenLoggers.Count > 0 || _treeHiddenPrefixes.Count > 0)
+                    {
+                        query = query.Where(l =>
+                        {
+                            if (l.Logger == null) return true;
+                            if (_treeHiddenLoggers.Contains(l.Logger)) return false;
+
+                            foreach (var prefix in _treeHiddenPrefixes)
+                            {
+                                if (l.Logger == prefix || l.Logger.StartsWith(prefix + ".")) return false;
+                            }
+                            return true;
+                        });
+                    }
                 }
             }
 
-            // חיפוש (תמיד פעיל אם יש טקסט)
+            // 3. Search
             if (!string.IsNullOrWhiteSpace(SearchText))
             {
                 string search = SearchText;
                 query = query.Where(l => l.Message != null && l.Message.IndexOf(search, StringComparison.OrdinalIgnoreCase) >= 0);
             }
 
-            // Filter Out (מותנה ב-_isAppFilterOutActive)
+            // 4. Negative Filter
             if (_isAppFilterOutActive && _negativeFilters.Any())
             {
                 var negFilters = _negativeFilters.ToList();
@@ -890,37 +975,28 @@ namespace IndiLogs_3._0.ViewModels
             });
         }
 
-        // --- LIVE MONITORING METHODS ---
+        // --- LIVE MONITORING ---
 
         private void StartLiveMonitoring(string path)
         {
             ClearLogs(null);
             LoadedFiles.Add(Path.GetFileName(path));
-
             _liveFilePath = path;
             _lastKnownFileSize = 0;
             _totalLogsReadFromFile = 0;
-
             _liveLogsCollection = new ObservableRangeCollection<LogEntry>();
             _allLogsCache = _liveLogsCollection;
             Logs = _liveLogsCollection;
-
             IsLiveMode = true;
             IsRunning = true;
             WindowTitle = "IndiLogs 3.0 - LIVE MONITORING";
-            StatusMessage = "Live monitoring started...";
-
             _liveCts = new CancellationTokenSource();
             Task.Run(() => PollingLoop(_liveCts.Token));
         }
 
         private void StopLiveMonitoring()
         {
-            if (_liveCts != null)
-            {
-                _liveCts.Cancel();
-                _liveCts = null;
-            }
+            if (_liveCts != null) { _liveCts.Cancel(); _liveCts = null; }
             IsLiveMode = false;
             IsRunning = false;
             _liveFilePath = null;
@@ -937,19 +1013,11 @@ namespace IndiLogs_3._0.ViewModels
                     {
                         FileInfo fi = new FileInfo(_liveFilePath);
                         long currentLen = fi.Length;
-                        if (currentLen > _lastKnownFileSize)
-                        {
-                            await FetchNewData(currentLen);
-                        }
-                        else if (currentLen < _lastKnownFileSize)
-                        {
-                            _lastKnownFileSize = 0;
-                            _totalLogsReadFromFile = 0;
-                        }
+                        if (currentLen > _lastKnownFileSize) await FetchNewData(currentLen);
+                        else if (currentLen < _lastKnownFileSize) { _lastKnownFileSize = 0; _totalLogsReadFromFile = 0; }
                     }
                 }
                 catch (Exception ex) { Debug.WriteLine($"Polling Error: {ex.Message}"); }
-
                 try { await Task.Delay(POLLING_INTERVAL_MS, token); }
                 catch (TaskCanceledException) { break; }
             }
@@ -990,12 +1058,9 @@ namespace IndiLogs_3._0.ViewModels
 
             if (newItems != null && newItems.Count > 0)
             {
-                // false = Main Mode (סט צבעים מלא)
                 await _coloringService.ApplyDefaultColorsAsync(newItems, false);
-
                 if (_savedColoringRules.Count > 0)
                     await _coloringService.ApplyCustomColoringAsync(newItems, _savedColoringRules);
-
                 newItems.Reverse();
 
                 Application.Current.Dispatcher.Invoke(() =>
@@ -1011,18 +1076,8 @@ namespace IndiLogs_3._0.ViewModels
             }
         }
 
-        private void LivePlay(object obj)
-        {
-            IsRunning = true;
-            StatusMessage = "Live monitoring active.";
-        }
-
-        private void LivePause(object obj)
-        {
-            IsRunning = false;
-            StatusMessage = "Live monitoring paused.";
-        }
-
+        private void LivePlay(object obj) { IsRunning = true; StatusMessage = "Live monitoring active."; }
+        private void LivePause(object obj) { IsRunning = false; StatusMessage = "Live monitoring paused."; }
         private void LiveClear(object obj)
         {
             IsRunning = false;
@@ -1035,14 +1090,7 @@ namespace IndiLogs_3._0.ViewModels
                 {
                     using (var fs = new FileStream(_liveFilePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite))
                     {
-                        using (var ms = new MemoryStream())
-                        {
-                            await fs.CopyToAsync(ms);
-                            ms.Position = 0;
-                            var logs = _logService.ParseLogStream(ms);
-                            _totalLogsReadFromFile = logs.Count;
-                            _lastKnownFileSize = fs.Length;
-                        }
+                        using (var ms = new MemoryStream()) { await fs.CopyToAsync(ms); ms.Position = 0; var logs = _logService.ParseLogStream(ms); _totalLogsReadFromFile = logs.Count; _lastKnownFileSize = fs.Length; }
                     }
                 }
                 catch { }
@@ -1050,13 +1098,15 @@ namespace IndiLogs_3._0.ViewModels
             StatusMessage = "Cleared. Press Play to resume from now.";
         }
 
-        // --- FILE LOADING & PROCESSING ---
+        // --- FILE LOADING ---
 
         private void LoadFile(object obj)
         {
             var dialog = new OpenFileDialog { Multiselect = true, Filter = "All Supported|*.zip;*.log|Log Files (*.log)|*.log|Log Archives (*.zip)|*.zip|All files (*.*)|*.*" };
             if (dialog.ShowDialog() == true) ProcessFiles(dialog.FileNames);
         }
+
+        // בתוך הקובץ ViewModels/MainViewModel.cs
 
         private async void ProcessFiles(string[] filePaths)
         {
@@ -1072,28 +1122,28 @@ namespace IndiLogs_3._0.ViewModels
                     StatusMessage = update.Message;
                 });
 
-                // 1. טעינה
                 var newSession = await _logService.LoadSessionAsync(filePaths, progress);
 
-                // 2. הגדרת שמות
                 newSession.FileName = System.IO.Path.GetFileName(filePaths[0]);
                 if (filePaths.Length > 1)
                     newSession.FileName += $" (+{filePaths.Length - 1})";
                 newSession.FilePath = filePaths[0];
 
-                // 3. צביעה ראשונית
                 StatusMessage = "Applying Colors...";
 
-                // צביעת ה-Main Logs (false = סט צבעים מלא)
+                // צביעה
                 await _coloringService.ApplyDefaultColorsAsync(newSession.Logs, false);
-
-                // צביעת ה-APP Logs (אם קיימים) (true = רק שגיאות)
                 if (newSession.AppDevLogs != null && newSession.AppDevLogs.Any())
-                {
                     await _coloringService.ApplyDefaultColorsAsync(newSession.AppDevLogs, true);
+
+                // --- לוגיקת הגרפים ---
+                // אנחנו לא שומרים את התוצאה כאן, אלא נותנים ל-GraphsVM לטפל בזה
+                if (newSession.Logs != null && newSession.Logs.Any())
+                {
+                    // קריאה אסינכרונית ללא המתנה (Fire and Forget) כדי לא לתקוע את ה-UI
+                    _ = GraphsVM.ProcessLogsAsync(newSession.Logs);
                 }
 
-                // 4. עדכון התצוגה
                 LoadedSessions.Add(newSession);
                 SelectedSession = newSession;
 
@@ -1103,7 +1153,7 @@ namespace IndiLogs_3._0.ViewModels
             catch (Exception ex)
             {
                 StatusMessage = $"Error: {ex.Message}";
-                MessageBox.Show($"Error loading files: {ex.Message}");
+                MessageBox.Show($"Error loading files: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             }
             finally
             {
@@ -1113,30 +1163,19 @@ namespace IndiLogs_3._0.ViewModels
 
         private void ClearLogs(object obj)
         {
-            _isMainFilterActive = false;
-            _isAppFilterActive = false;
-            _isMainFilterOutActive = false;
-            _isAppFilterOutActive = false;
-            _isAppTimeFocusActive = false;
-            _lastFilteredAppCache = null;
+            MarkedLogs.Clear(); MarkedAppLogs.Clear();
+            _isMainFilterActive = false; _isAppFilterActive = false;
+            _isMainFilterOutActive = false; _isAppFilterOutActive = false;
+            _isAppTimeFocusActive = false; _lastFilteredAppCache = null;
             _isTimeFocusActive = false;
             if (_allLogsCache != null) _allLogsCache.Clear();
-            _lastFilteredCache.Clear();
-            _negativeFilters.Clear();
-            _activeThreadFilters.Clear();
-            Logs = new List<LogEntry>();
-            FilteredLogs.Clear();
-            AppDevLogsFiltered.Clear();
-            LoggerTreeRoot.Clear();
-            Events.Clear();
-            Screenshots.Clear();
-            LoadedFiles.Clear();
-            MarkedLogs.Clear();
-            CurrentProgress = 0; SetupInfo = ""; PressConfig = ""; ScreenshotZoom = 400;
-            IsFilterOutActive = false;
-            LoadedSessions.Clear();
-            SelectedSession = null;
+            _lastFilteredCache.Clear(); _negativeFilters.Clear(); _activeThreadFilters.Clear();
+            Logs = new List<LogEntry>(); FilteredLogs.Clear(); AppDevLogsFiltered.Clear();
+            LoggerTreeRoot.Clear(); Events.Clear(); Screenshots.Clear();
+            LoadedFiles.Clear(); CurrentProgress = 0; SetupInfo = ""; PressConfig = ""; ScreenshotZoom = 400;
+            IsFilterOutActive = false; LoadedSessions.Clear(); SelectedSession = null;
             _allAppLogsCache = null;
+            ResetTreeFilters();
         }
 
         // --- FILTER & ANALYSIS COMMANDS ---
@@ -1159,8 +1198,7 @@ namespace IndiLogs_3._0.ViewModels
             var win = new FilterOutWindow(SelectedLog.ThreadName);
             if (win.ShowDialog() == true && !string.IsNullOrWhiteSpace(win.TextToRemove))
             {
-                string threadToHide = win.TextToRemove;
-                string filterKey = "THREAD:" + threadToHide;
+                string filterKey = "THREAD:" + win.TextToRemove;
                 if (!_negativeFilters.Contains(filterKey))
                 {
                     _negativeFilters.Add(filterKey);
@@ -1177,16 +1215,8 @@ namespace IndiLogs_3._0.ViewModels
             var win = new ThreadFilterWindow(threads);
             if (win.ShowDialog() == true)
             {
-                if (win.ShouldClear)
-                {
-                    _activeThreadFilters.Clear();
-                    if (_savedFilterRoot == null) IsFilterActive = false;
-                }
-                else if (win.SelectedThreads != null && win.SelectedThreads.Any())
-                {
-                    _activeThreadFilters = win.SelectedThreads;
-                    IsFilterActive = true;
-                }
+                if (win.ShouldClear) { _activeThreadFilters.Clear(); if (_savedFilterRoot == null) IsFilterActive = false; }
+                else if (win.SelectedThreads != null && win.SelectedThreads.Any()) { _activeThreadFilters = win.SelectedThreads; IsFilterActive = true; }
                 ToggleFilterView(IsFilterActive);
             }
         }
@@ -1194,70 +1224,37 @@ namespace IndiLogs_3._0.ViewModels
         private async void OpenFilterWindow(object obj)
         {
             var win = new FilterWindow();
-            bool isAppTab = SelectedTabIndex == 2; // זיהוי טאב APP
-
-            // טעינת הפילטר הקיים לפי הטאב הנוכחי
+            bool isAppTab = SelectedTabIndex == 2;
             var currentRoot = isAppTab ? _appFilterRoot : _mainFilterRoot;
 
-            if (currentRoot != null)
-            {
-                win.ViewModel.RootNodes.Clear();
-                win.ViewModel.RootNodes.Add(currentRoot.DeepClone());
-            }
+            if (currentRoot != null) { win.ViewModel.RootNodes.Clear(); win.ViewModel.RootNodes.Add(currentRoot.DeepClone()); }
 
             if (win.ShowDialog() == true)
             {
                 var newRoot = win.ViewModel.RootNodes.FirstOrDefault();
                 bool hasAdvanced = newRoot != null && newRoot.Children.Count > 0;
-
                 IsBusy = true;
                 await Task.Run(() =>
                 {
-                    if (isAppTab)
-                    {
-                        // שמירה ויישום ל-APP
-                        _appFilterRoot = newRoot;
-                        // ב-APP אין Cache מחושב מראש לפילטר, הוא מחושב ב-ApplyAppLogsFilter
-                    }
+                    if (isAppTab) _appFilterRoot = newRoot;
                     else
                     {
-                        // שמירה ויישום ל-MAIN
                         _mainFilterRoot = newRoot;
-                        if (hasAdvanced)
-                        {
-                            var res = _allLogsCache.Where(l => EvaluateFilterNode(l, _mainFilterRoot)).ToList();
-                            _lastFilteredCache = res;
-                        }
-                        else
-                        {
-                            _lastFilteredCache.Clear(); // אם אין פילטר, מנקים את המטמון
-                        }
+                        if (hasAdvanced) { var res = _allLogsCache.Where(l => EvaluateFilterNode(l, _mainFilterRoot)).ToList(); _lastFilteredCache = res; }
+                        else _lastFilteredCache.Clear();
                     }
                 });
 
-                // עדכון UI
                 Application.Current.Dispatcher.Invoke(() =>
-               Application.Current.Dispatcher.Invoke(() =>
-               {
-                   if (isAppTab)
-                   {
-                       // עדכון ישיר של APP FLAG
-                       _isAppFilterActive = hasAdvanced;
-                       ApplyAppLogsFilter();
-                   }
-                   else
-                   {
-                       // עדכון ישיר של MAIN FLAG
-                       _isMainFilterActive = hasAdvanced || _activeThreadFilters.Any();
-                       UpdateMainLogsFilter(_isMainFilterActive);
-                   }
-
-                   // עדכון הצ'קבוקסים ב-UI
-                   OnPropertyChanged(nameof(IsFilterActive));
-                   IsBusy = false;
-               }));
+                {
+                    if (isAppTab) { _isAppFilterActive = hasAdvanced; ApplyAppLogsFilter(); }
+                    else { _isMainFilterActive = hasAdvanced || _activeThreadFilters.Any(); UpdateMainLogsFilter(_isMainFilterActive); }
+                    OnPropertyChanged(nameof(IsFilterActive));
+                    IsBusy = false;
+                });
             }
         }
+
         private bool EvaluateFilterNode(LogEntry log, FilterNode node)
         {
             if (node == null) return true;
@@ -1272,11 +1269,9 @@ namespace IndiLogs_3._0.ViewModels
                     case "ProcessName": val = log.ProcessName; break;
                     default: val = log.Message; break;
                 }
-
                 if (string.IsNullOrEmpty(val)) return false;
                 string op = node.Operator;
                 string criteria = node.Value;
-
                 if (op == "Equals") return val.Equals(criteria, StringComparison.OrdinalIgnoreCase);
                 if (op == "Begins With") return val.StartsWith(criteria, StringComparison.OrdinalIgnoreCase);
                 if (op == "Ends With") return val.EndsWith(criteria, StringComparison.OrdinalIgnoreCase);
@@ -1289,22 +1284,15 @@ namespace IndiLogs_3._0.ViewModels
                 string op = node.LogicalOperator;
                 bool isBaseOr = op.Contains("OR");
                 bool baseResult;
-
                 if (isBaseOr)
                 {
                     baseResult = false;
-                    foreach (var child in node.Children)
-                    {
-                        if (EvaluateFilterNode(log, child)) { baseResult = true; break; }
-                    }
+                    foreach (var child in node.Children) { if (EvaluateFilterNode(log, child)) { baseResult = true; break; } }
                 }
                 else
                 {
                     baseResult = true;
-                    foreach (var child in node.Children)
-                    {
-                        if (!EvaluateFilterNode(log, child)) { baseResult = false; break; }
-                    }
+                    foreach (var child in node.Children) { if (!EvaluateFilterNode(log, child)) { baseResult = false; break; } }
                 }
                 if (op.StartsWith("NOT")) return !baseResult;
                 return baseResult;
@@ -1313,73 +1301,31 @@ namespace IndiLogs_3._0.ViewModels
 
         private void FilterContext(object obj)
         {
-            // אם לא נבחרה שורה, אין על מה להתמקד
             if (SelectedLog == null) return;
-
             IsBusy = true;
-
-            // חישוב הטווח
             double multiplier = SelectedTimeUnit == "Minutes" ? 60 : 1;
             double rangeInSeconds = ContextSeconds * multiplier;
-            string unitLabel = SelectedTimeUnit == "Minutes" ? "min" : "sec";
-            StatusMessage = $"Applying Focus Time (+/- {ContextSeconds} {unitLabel})...";
-
             DateTime targetTime = SelectedLog.Date;
             DateTime startTime = targetTime.AddSeconds(-rangeInSeconds);
             DateTime endTime = targetTime.AddSeconds(rangeInSeconds);
-
-            // בדיקה באיזה טאב אנחנו נמצאים
             bool isAppTab = SelectedTabIndex == 2;
 
             Task.Run(() =>
             {
                 if (isAppTab)
                 {
-                    // === לוגיקה ל-APP ===
                     if (_allAppLogsCache != null)
                     {
-                        var contextLogs = _allAppLogsCache
-                            .Where(l => l.Date >= startTime && l.Date <= endTime)
-                            .OrderByDescending(l => l.Date)
-                            .ToList();
-
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            _lastFilteredAppCache = contextLogs;
-                            _isAppTimeFocusActive = true;
-                            // אנחנו לא מאפסים את ה-Tree Filter, רק את הפילטר המתקדם אם רוצים
-                            _appFilterRoot = null;
-
-                            IsFilterActive = true; // מדליק את המצב הויזואלי
-                            ToggleFilterView(true); // רענון
-
-                            StatusMessage = $"APP Focus Time: {contextLogs.Count} logs shown";
-                            IsBusy = false;
-                        });
+                        var contextLogs = _allAppLogsCache.Where(l => l.Date >= startTime && l.Date <= endTime).OrderByDescending(l => l.Date).ToList();
+                        Application.Current.Dispatcher.Invoke(() => { _lastFilteredAppCache = contextLogs; _isAppTimeFocusActive = true; _appFilterRoot = null; IsFilterActive = true; ToggleFilterView(true); StatusMessage = $"APP Focus Time: {contextLogs.Count} logs shown"; IsBusy = false; });
                     }
                 }
                 else
                 {
-                    // === לוגיקה ל-MAIN (הקוד הקיים) ===
                     if (_allLogsCache != null)
                     {
-                        var contextLogs = _allLogsCache
-                            .Where(l => l.Date >= startTime && l.Date <= endTime)
-                            .OrderByDescending(l => l.Date)
-                            .ToList();
-
-                        Application.Current.Dispatcher.Invoke(() =>
-                        {
-                            _lastFilteredCache = contextLogs;
-                            _savedFilterRoot = null;
-                            _isTimeFocusActive = true;
-
-                            IsFilterActive = true;
-                            ToggleFilterView(true);
-
-                            StatusMessage = $"Focus Time: +/- {rangeInSeconds}s | {contextLogs.Count} logs shown";
-                            IsBusy = false;
-                        });
+                        var contextLogs = _allLogsCache.Where(l => l.Date >= startTime && l.Date <= endTime).OrderByDescending(l => l.Date).ToList();
+                        Application.Current.Dispatcher.Invoke(() => { _lastFilteredCache = contextLogs; _savedFilterRoot = null; _isTimeFocusActive = true; IsFilterActive = true; ToggleFilterView(true); StatusMessage = $"Focus Time: +/- {rangeInSeconds}s | {contextLogs.Count} logs shown"; IsBusy = false; });
                     }
                 }
             });
@@ -1387,80 +1333,39 @@ namespace IndiLogs_3._0.ViewModels
         private void UndoFilterOut(object parameter) { }
 
         // --- EXPORT & ANALYSIS ---
-
         private async void ExportParsedData(object obj)
         {
-            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
-            {
-                MessageBox.Show("No logs loaded to export.", "Info", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return;
-            }
-            IsBusy = true;
-            StatusMessage = "Parsing and Exporting CSV...";
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any()) { MessageBox.Show("No logs loaded.", "Info"); return; }
+            IsBusy = true; StatusMessage = "Parsing and Exporting CSV...";
             await _csvService.ExportLogsToCsvAsync(SelectedSession.Logs, SelectedSession.FileName);
-            IsBusy = false;
-            StatusMessage = "Ready";
+            IsBusy = false; StatusMessage = "Ready";
         }
 
         private void RunAnalysis(object obj)
         {
-            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
-            {
-                MessageBox.Show("No logs loaded to analyze.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
-            if (_analysisWindow != null && _analysisWindow.IsVisible)
-            {
-                _analysisWindow.Activate();
-                if (_analysisWindow.WindowState == WindowState.Minimized) _analysisWindow.WindowState = WindowState.Normal;
-                return;
-            }
-            if (SelectedSession.CachedAnalysis != null && SelectedSession.CachedAnalysis.Any())
-            {
-                OpenAnalysisWindow(SelectedSession.CachedAnalysis);
-                return;
-            }
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any()) { MessageBox.Show("No logs loaded.", "Info"); return; }
+            if (_analysisWindow != null && _analysisWindow.IsVisible) { _analysisWindow.Activate(); return; }
+            if (SelectedSession.CachedAnalysis != null && SelectedSession.CachedAnalysis.Any()) { OpenAnalysisWindow(SelectedSession.CachedAnalysis); return; }
 
-            IsBusy = true;
-            StatusMessage = "Initializing Analysis...";
+            IsBusy = true; StatusMessage = "Initializing Analysis...";
             var logsToAnalyze = SelectedSession.Logs.ToList();
-
             Task.Run(() =>
             {
                 try
                 {
                     var allResults = new List<AnalysisResult>();
                     ReportProgress(10, "Running Mechanit Analyzer...");
-                    var mechAnalyzer = new MechanitAnalyzer();
-                    var mechResults = mechAnalyzer.Analyze(logsToAnalyze);
+                    var mechResults = new MechanitAnalyzer().Analyze(logsToAnalyze);
                     if (mechResults != null) allResults.AddRange(mechResults);
 
                     ReportProgress(50, "Running GetReady Analyzer...");
-                    var grAnalyzer = new GetReadyAnalyzer();
-                    var grResults = grAnalyzer.Analyze(logsToAnalyze);
+                    var grResults = new GetReadyAnalyzer().Analyze(logsToAnalyze);
                     if (grResults != null) allResults.AddRange(grResults);
 
                     ReportProgress(90, "Finalizing Report...");
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        IsBusy = false;
-                        StatusMessage = "Ready";
-                        if (allResults.Count == 0) MessageBox.Show("No processes found (Mechanit/GetReady).", "Analysis Result");
-                        else
-                        {
-                            if (SelectedSession != null) SelectedSession.CachedAnalysis = allResults;
-                            OpenAnalysisWindow(allResults);
-                        }
-                    });
+                    Application.Current.Dispatcher.Invoke(() => { IsBusy = false; StatusMessage = "Ready"; if (allResults.Count == 0) MessageBox.Show("No processes found."); else { SelectedSession.CachedAnalysis = allResults; OpenAnalysisWindow(allResults); } });
                 }
-                catch (Exception ex)
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        IsBusy = false;
-                        MessageBox.Show($"TASK ERROR:\n{ex.Message}", "Error");
-                    });
-                }
+                catch (Exception ex) { Application.Current.Dispatcher.Invoke(() => { IsBusy = false; MessageBox.Show($"TASK ERROR:\n{ex.Message}"); }); }
             });
         }
 
@@ -1472,23 +1377,12 @@ namespace IndiLogs_3._0.ViewModels
             _analysisWindow.Show();
         }
 
-        private void ReportProgress(double percent, string msg)
-        {
-            Application.Current.Dispatcher.Invoke(() =>
-            {
-                CurrentProgress = percent;
-                StatusMessage = msg;
-            });
-        }
+        private void ReportProgress(double percent, string msg) { Application.Current.Dispatcher.Invoke(() => { CurrentProgress = percent; StatusMessage = msg; }); }
 
         private void OpenStatesWindow(object obj)
         {
             if (_statesWindow != null && _statesWindow.IsVisible) { _statesWindow.Activate(); return; }
-            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any())
-            {
-                MessageBox.Show("No logs loaded.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
+            if (SelectedSession == null || SelectedSession.Logs == null || !SelectedSession.Logs.Any()) { MessageBox.Show("No logs loaded."); return; }
             if (SelectedSession.CachedStates != null && SelectedSession.CachedStates.Count > 0)
             {
                 _statesWindow = new StatesWindow(SelectedSession.CachedStates, this);
@@ -1499,29 +1393,14 @@ namespace IndiLogs_3._0.ViewModels
                 return;
             }
 
-            IsBusy = true;
-            StatusMessage = "Analyzing States...";
+            IsBusy = true; StatusMessage = "Analyzing States...";
             var logsToProcess = SelectedSession.Logs.ToList();
-
             Task.Run(() =>
             {
                 var statesList = new List<StateEntry>();
-                var transitionLogs = logsToProcess
-                    .Where(l => l.ThreadName != null && l.ThreadName.Equals("Manager", StringComparison.OrdinalIgnoreCase) &&
-                                l.Message != null && l.Message.IndexOf("PlcMngr:", StringComparison.OrdinalIgnoreCase) >= 0 &&
-                                l.Message.Contains("->"))
-                    .OrderBy(l => l.Date).ToList();
+                var transitionLogs = logsToProcess.Where(l => l.ThreadName != null && l.ThreadName.Equals("Manager", StringComparison.OrdinalIgnoreCase) && l.Message != null && l.Message.IndexOf("PlcMngr:", StringComparison.OrdinalIgnoreCase) >= 0 && l.Message.Contains("->")).OrderBy(l => l.Date).ToList();
 
-                if (transitionLogs.Count == 0)
-                {
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        IsBusy = false;
-                        StatusMessage = "Ready";
-                        MessageBox.Show("No state transitions found in this log.", "Info", MessageBoxButton.OK, MessageBoxImage.Information);
-                    });
-                    return;
-                }
+                if (transitionLogs.Count == 0) { Application.Current.Dispatcher.Invoke(() => { IsBusy = false; StatusMessage = "Ready"; MessageBox.Show("No state transitions found."); }); return; }
 
                 DateTime logEndLimit = logsToProcess.Last().Date;
                 for (int i = 0; i < transitionLogs.Count; i++)
@@ -1531,17 +1410,7 @@ namespace IndiLogs_3._0.ViewModels
                     if (parts.Length < 2) continue;
                     string fromStateRaw = parts[0].Replace("PlcMngr:", "").Trim();
                     string toStateRaw = parts[1].Trim();
-
-                    var entry = new StateEntry
-                    {
-                        StateName = toStateRaw,
-                        TransitionTitle = $"{fromStateRaw} -> {toStateRaw}",
-                        StartTime = currentLog.Date,
-                        LogReference = currentLog,
-                        Status = "",
-                        StatusColor = Brushes.Gray
-                    };
-
+                    var entry = new StateEntry { StateName = toStateRaw, TransitionTitle = $"{fromStateRaw} -> {toStateRaw}", StartTime = currentLog.Date, LogReference = currentLog, Status = "", StatusColor = Brushes.Gray };
                     if (i < transitionLogs.Count - 1)
                     {
                         var nextLog = transitionLogs[i + 1];
@@ -1550,37 +1419,15 @@ namespace IndiLogs_3._0.ViewModels
                         if (nextParts.Length >= 2)
                         {
                             string nextDestination = nextParts[1].Trim();
-                            if (entry.StateName.Equals("GET_READY", StringComparison.OrdinalIgnoreCase) || entry.StateName.Equals("GR", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (nextDestination.Equals("DYNAMIC_READY", StringComparison.OrdinalIgnoreCase)) { entry.Status = "SUCCESS"; entry.StatusColor = Brushes.LightGreen; }
-                                else { entry.Status = "FAILED"; entry.StatusColor = Brushes.Red; }
-                            }
-                            else if (entry.StateName.Equals("MECH_INIT", StringComparison.OrdinalIgnoreCase))
-                            {
-                                if (nextDestination.Equals("STANDBY", StringComparison.OrdinalIgnoreCase)) { entry.Status = "SUCCESS"; entry.StatusColor = Brushes.LightGreen; }
-                                else { entry.Status = "FAILED"; entry.StatusColor = Brushes.Red; }
-                            }
+                            if (entry.StateName.Equals("GET_READY", StringComparison.OrdinalIgnoreCase)) { if (nextDestination.Equals("DYNAMIC_READY", StringComparison.OrdinalIgnoreCase)) { entry.Status = "SUCCESS"; entry.StatusColor = Brushes.LightGreen; } else { entry.Status = "FAILED"; entry.StatusColor = Brushes.Red; } }
+                            else if (entry.StateName.Equals("MECH_INIT", StringComparison.OrdinalIgnoreCase)) { if (nextDestination.Equals("STANDBY", StringComparison.OrdinalIgnoreCase)) { entry.Status = "SUCCESS"; entry.StatusColor = Brushes.LightGreen; } else { entry.Status = "FAILED"; entry.StatusColor = Brushes.Red; } }
                         }
                     }
-                    else
-                    {
-                        entry.EndTime = logEndLimit;
-                        entry.Status = "Current";
-                    }
+                    else { entry.EndTime = logEndLimit; entry.Status = "Current"; }
                     statesList.Add(entry);
                 }
-
                 var displayList = statesList.OrderByDescending(s => s.StartTime).ToList();
-                Application.Current.Dispatcher.Invoke(() =>
-                {
-                    IsBusy = false; StatusMessage = "Ready";
-                    if (SelectedSession != null) SelectedSession.CachedStates = displayList;
-                    _statesWindow = new StatesWindow(displayList, this);
-                    _statesWindow.Owner = Application.Current.MainWindow;
-                    _statesWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-                    _statesWindow.Closed += (s, e) => _statesWindow = null;
-                    _statesWindow.Show();
-                });
+                Application.Current.Dispatcher.Invoke(() => { IsBusy = false; StatusMessage = "Ready"; SelectedSession.CachedStates = displayList; _statesWindow = new StatesWindow(displayList, this); _statesWindow.Owner = Application.Current.MainWindow; _statesWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner; _statesWindow.Closed += (s, e) => _statesWindow = null; _statesWindow.Show(); });
             });
         }
 
@@ -1588,61 +1435,25 @@ namespace IndiLogs_3._0.ViewModels
         {
             if (obj is StateEntry state)
             {
-                IsBusy = true;
-                StatusMessage = $"Focusing state: {state.StateName}...";
-
+                IsBusy = true; StatusMessage = $"Focusing state: {state.StateName}...";
                 Task.Run(() =>
                 {
-                    // 1. חישוב הזמנים
                     DateTime start = state.StartTime;
                     DateTime end = state.EndTime ?? DateTime.MaxValue;
-
-                    // 2. סינון הרשימה הראשית בלבד (מתוך _allLogsCache)
                     if (_allLogsCache != null)
                     {
-                        // א. כל הלוגים בטווח הזמן (עבור הטאב הראשי)
-                        var timeSlice = _allLogsCache
-                            .Where(l => l.Date >= start && l.Date <= end)
-                            .OrderByDescending(l => l.Date)
-                            .ToList();
-
-                        // ב. רק לוגים "חשובים" בטווח הזמן (עבור Logs Filtered)
-                        // זה שומר על הפילטר הדיפולטיבי של הטאב השני
+                        var timeSlice = _allLogsCache.Where(l => l.Date >= start && l.Date <= end).OrderByDescending(l => l.Date).ToList();
                         var smartFiltered = timeSlice.Where(l => IsDefaultLog(l)).ToList();
-
                         Application.Current.Dispatcher.Invoke(() =>
                         {
-                            // 3. עדכון משתני ה-MAIN
-                            _lastFilteredCache = timeSlice;
-                            _savedFilterRoot = null;
-                            _isTimeFocusActive = true;
-                            _isMainFilterActive = true;
-
-                            // 4. מעבר לטאב ה-LOGS הראשי (0)
-                            SelectedTabIndex = 0;
-
-                            // 5. רענון התצוגה הראשית
-                            UpdateMainLogsFilter(true);
-
-                            // 6. --- התוספת החדשה: עדכון טאב Logs (Filtered) ---
-                            if (FilteredLogs != null)
-                            {
-                                FilteredLogs.ReplaceAll(smartFiltered);
-                                // בחירת השורה הראשונה גם שם
-                                if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0];
-                            }
-
-                            // 7. עדכון הצ'קבוקסים ב-UI
+                            _lastFilteredCache = timeSlice; _savedFilterRoot = null; _isTimeFocusActive = true; _isMainFilterActive = true;
+                            SelectedTabIndex = 0; UpdateMainLogsFilter(true);
+                            if (FilteredLogs != null) { FilteredLogs.ReplaceAll(smartFiltered); if (FilteredLogs.Count > 0) SelectedLog = FilteredLogs[0]; }
                             OnPropertyChanged(nameof(IsFilterActive));
-
-                            StatusMessage = $"State: {state.StateName} | Main: {timeSlice.Count}, Filtered: {smartFiltered.Count}";
-                            IsBusy = false;
+                            StatusMessage = $"State: {state.StateName} | Main: {timeSlice.Count}, Filtered: {smartFiltered.Count}"; IsBusy = false;
                         });
                     }
-                    else
-                    {
-                        IsBusy = false;
-                    }
+                    else IsBusy = false;
                 });
             }
         }
@@ -1653,16 +1464,7 @@ namespace IndiLogs_3._0.ViewModels
         {
             string path = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "IndiLogs", "Configs");
             if (Directory.Exists(path))
-                foreach (var f in Directory.GetFiles(path, "*.json"))
-                {
-                    try
-                    {
-                        var c = JsonConvert.DeserializeObject<SavedConfiguration>(File.ReadAllText(f));
-                        c.FilePath = f;
-                        SavedConfigs.Add(c);
-                    }
-                    catch { }
-                }
+                foreach (var f in Directory.GetFiles(path, "*.json")) { try { var c = JsonConvert.DeserializeObject<SavedConfiguration>(File.ReadAllText(f)); c.FilePath = f; SavedConfigs.Add(c); } catch { } }
         }
 
         private async void ApplyConfiguration(object parameter)
@@ -1670,89 +1472,111 @@ namespace IndiLogs_3._0.ViewModels
             if (parameter is SavedConfiguration c)
             {
                 IsBusy = true;
-                StatusMessage = $"Applying config: {c.Name}...";
+                StatusMessage = $"Loading config: {c.Name} (Overriding current state)...";
 
+                // ============================================================
+                // 1. ניקוי מלא (Clean Slate) - מאפסים הכל לפני הטעינה
+                // ============================================================
+                await Application.Current.Dispatcher.InvokeAsync(() =>
+                {
+                    // איפוס חיפוש
+                    SearchText = "";
+                    IsSearchPanelVisible = false;
+
+                    // איפוס פילטרים ידניים (Thread, Filter Out)
+                    _negativeFilters.Clear();
+                    _activeThreadFilters.Clear();
+
+                    // איפוס פוקוס זמן
+                    _isTimeFocusActive = false;
+                    _isAppTimeFocusActive = false;
+
+                    // איפוס עץ (Tree Isolation)
+                    ResetTreeFilters();
+
+                    // איפוס מטמונים (Caches) של סינון קודם
+                    _lastFilteredCache.Clear();
+                    _lastFilteredAppCache = null;
+
+                    // כיבוי דגלים זמני (נדליק מחדש לפי הצורך בסוף)
+                    _isMainFilterActive = false;
+                    _isAppFilterActive = false;
+                    _isMainFilterOutActive = false;
+                    _isAppFilterOutActive = false;
+
+                    // עדכון כפתורים ב-UI
+                    OnPropertyChanged(nameof(IsFilterActive));
+                    OnPropertyChanged(nameof(IsFilterOutActive));
+                });
+
+                // ============================================================
+                // 2. טעינת חוקי צביעה (Background)
+                // ============================================================
                 await Task.Run(async () =>
                 {
-                    // --- חלק 1: טיפול ב-LOGS (Main) ---
-                    // נחיל שינויים רק אם בקובץ השמור יש באמת חוקים ל-Main
-                    if (c.MainColoringRules != null && c.MainColoringRules.Any())
+                    // טעינת חוקים ל-MAIN
+                    // אם הרשימה בקובץ ריקה, נאתחל לרשימה ריקה (כדי למחוק חוקים קודמים)
+                    _mainColoringRules = c.MainColoringRules ?? new List<ColoringCondition>();
+                    if (_allLogsCache != null)
                     {
-                        _mainColoringRules = c.MainColoringRules;
-
-                        if (_allLogsCache != null)
-                        {
-                            // איפוס וצביעה מחדש ל-Logs
-                            await _coloringService.ApplyDefaultColorsAsync(_allLogsCache, false);
+                        await _coloringService.ApplyDefaultColorsAsync(_allLogsCache, false);
+                        if (_mainColoringRules.Any())
                             await _coloringService.ApplyCustomColoringAsync(_allLogsCache, _mainColoringRules);
-                        }
                     }
-                    // הערה: אם הרשימה בקובץ ריקה/null, אנחנו לא נוגעים ב-Main הקיים!
 
-                    // --- חלק 2: טיפול ב-APP ---
-                    // נחיל שינויים רק אם בקובץ השמור יש באמת חוקים ל-App
-                    if (c.AppColoringRules != null && c.AppColoringRules.Any())
+                    // טעינת חוקים ל-APP
+                    _appColoringRules = c.AppColoringRules ?? new List<ColoringCondition>();
+                    if (_allAppLogsCache != null)
                     {
-                        _appColoringRules = c.AppColoringRules;
-
-                        if (_allAppLogsCache != null)
-                        {
-                            // איפוס וצביעה מחדש ל-App
-                            await _coloringService.ApplyDefaultColorsAsync(_allAppLogsCache, true);
+                        await _coloringService.ApplyDefaultColorsAsync(_allAppLogsCache, true);
+                        if (_appColoringRules.Any())
                             await _coloringService.ApplyCustomColoringAsync(_allAppLogsCache, _appColoringRules);
-                        }
                     }
                 });
 
-                // --- חלק 3: פילטרים ---
+                // ============================================================
+                // 3. טעינת פילטרים מתקדמים (Logic)
+                // ============================================================
 
-                // פילטר ראשי
-                if (c.MainFilterRoot != null)
+                // טעינת עץ פילטר ראשי
+                _mainFilterRoot = c.MainFilterRoot;
+                if (_mainFilterRoot != null && _allLogsCache != null)
                 {
-                    _mainFilterRoot = c.MainFilterRoot;
-                    if (_allLogsCache != null)
-                    {
-                        var res = await Task.Run(() => _allLogsCache.Where(l => EvaluateFilterNode(l, _mainFilterRoot)).ToList());
-                        _lastFilteredCache = res;
-                        _isTimeFocusActive = false;
-                        IsFilterActive = true;
-                    }
+                    // חישוב מחדש של הפילטר הראשי
+                    var res = await Task.Run(() => _allLogsCache.Where(l => EvaluateFilterNode(l, _mainFilterRoot)).ToList());
+                    _lastFilteredCache = res;
                 }
 
-                // פילטר אפליקציה
-                if (c.AppFilterRoot != null)
-                {
-                    _appFilterRoot = c.AppFilterRoot;
-                    // הפילטר יחושב מחדש בפקודת הרענון למטה
-                }
+                // טעינת עץ פילטר אפליקציה
+                _appFilterRoot = c.AppFilterRoot;
 
-                // --- חלק 4: רענון התצוגה (UI Refresh) ---
-                // (בתוך ApplyConfiguration, שלב 4 - רענון UI)
+                // ============================================================
+                // 4. רענון UI סופי
+                // ============================================================
                 Application.Current.Dispatcher.Invoke(() =>
                 {
-                    // אם טענו חוקים ל-APP, נדליק את הפילטר של APP
-                    if (c.AppFilterRoot != null && c.AppFilterRoot.Children.Count > 0)
+                    // קביעת הדגלים ע"פ מה שנטען מהקובץ בלבד
+                    if (_appFilterRoot != null && _appFilterRoot.Children.Count > 0)
                         _isAppFilterActive = true;
 
-                    // אם טענו חוקים ל-MAIN, נדליק את הפילטר של MAIN
-                    if (c.MainFilterRoot != null && c.MainFilterRoot.Children.Count > 0)
+                    if (_mainFilterRoot != null && _mainFilterRoot.Children.Count > 0)
                         _isMainFilterActive = true;
 
-                    // רענון טאב LOGS
+                    // רענון צבעים בטבלאות (Visual Refresh)
                     if (Logs != null) foreach (var log in Logs) log.OnPropertyChanged("RowBackground");
-                    UpdateMainLogsFilter(_isMainFilterActive);
-
-                    // רענון טאב APP
-                    ApplyAppLogsFilter();
                     if (AppDevLogsFiltered != null) foreach (var log in AppDevLogsFiltered) log.OnPropertyChanged("RowBackground");
 
-                    // רענון כפתורי הצ'קבוקס
+                    // הפעלת הפילטרים החדשים בפועל
+                    UpdateMainLogsFilter(_isMainFilterActive);
+                    ApplyAppLogsFilter();
+
+                    // עדכון מצב הכפתורים
                     OnPropertyChanged(nameof(IsFilterActive));
                     OnPropertyChanged(nameof(IsFilterOutActive));
                 });
 
                 IsBusy = false;
-                StatusMessage = "Configuration applied successfully.";
+                StatusMessage = "Configuration loaded successfully.";
             }
         }
         private void RemoveConfiguration(object parameter)
@@ -1769,44 +1593,18 @@ namespace IndiLogs_3._0.ViewModels
         {
             var existingNames = SavedConfigs.Select(c => c.Name).ToList();
             var dlg = new SaveConfigWindow(existingNames);
-
             if (dlg.ShowDialog() == true)
             {
                 string dir = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData), "IndiLogs", "Configs");
                 Directory.CreateDirectory(dir);
-
-                var cfg = new SavedConfiguration
-                {
-                    Name = dlg.ConfigName,
-                    CreatedDate = DateTime.Now,
-                    FilePath = Path.Combine(dir, dlg.ConfigName + ".json"),
-
-                    // שמירת המצב הנוכחי של ה-LOGS (אם ריק, ישמור רשימה ריקה)
-                    MainColoringRules = _mainColoringRules ?? new List<ColoringCondition>(),
-                    MainFilterRoot = _mainFilterRoot,
-
-                    // שמירת המצב הנוכחי של ה-APP (אם ריק, ישמור רשימה ריקה)
-                    AppColoringRules = _appColoringRules ?? new List<ColoringCondition>(),
-                    AppFilterRoot = _appFilterRoot
-                };
-
-                File.WriteAllText(cfg.FilePath, JsonConvert.SerializeObject(cfg));
-                SavedConfigs.Add(cfg);
+                var cfg = new SavedConfiguration { Name = dlg.ConfigName, CreatedDate = DateTime.Now, FilePath = Path.Combine(dir, dlg.ConfigName + ".json"), MainColoringRules = _mainColoringRules ?? new List<ColoringCondition>(), MainFilterRoot = _mainFilterRoot, AppColoringRules = _appColoringRules ?? new List<ColoringCondition>(), AppFilterRoot = _appFilterRoot };
+                File.WriteAllText(cfg.FilePath, JsonConvert.SerializeObject(cfg)); SavedConfigs.Add(cfg);
             }
         }
         private void LoadConfigurationFromFile(object obj)
         {
             var dlg = new OpenFileDialog { Filter = "JSON|*.json" };
-            if (dlg.ShowDialog() == true)
-            {
-                try
-                {
-                    var c = JsonConvert.DeserializeObject<SavedConfiguration>(File.ReadAllText(dlg.FileName));
-                    c.FilePath = dlg.FileName;
-                    SavedConfigs.Add(c);
-                }
-                catch { }
-            }
+            if (dlg.ShowDialog() == true) { try { var c = JsonConvert.DeserializeObject<SavedConfiguration>(File.ReadAllText(dlg.FileName)); c.FilePath = dlg.FileName; SavedConfigs.Add(c); } catch { } }
         }
 
         private void ApplyTheme(bool isDark)
@@ -1832,25 +1630,15 @@ namespace IndiLogs_3._0.ViewModels
             }
         }
 
-        private void UpdateResource(ResourceDictionary dict, string key, object value)
-        {
-            if (dict.Contains(key)) dict.Remove(key);
-            dict.Add(key, value);
-        }
+        private void UpdateResource(ResourceDictionary dict, string key, object value) { if (dict.Contains(key)) dict.Remove(key); dict.Add(key, value); }
 
         private async void OpenColoringWindow(object obj)
         {
             try
             {
                 var win = new ColoringWindow();
-
-                // זיהוי הטאב הפעיל: 2 זה APP, כל השאר נחשב Main/Logs
                 bool isAppTab = SelectedTabIndex == 2;
-
-                // טעינת רשימת החוקים המתאימה
                 var currentRulesSource = isAppTab ? _appColoringRules : _mainColoringRules;
-
-                // יצירת עותק (Deep Clone) כדי ששינויים בחלון לא ישפיעו אם לוחצים "ביטול"
                 var rulesCopy = currentRulesSource.Select(r => r.Clone()).ToList();
                 win.LoadSavedRules(rulesCopy);
 
@@ -1859,80 +1647,26 @@ namespace IndiLogs_3._0.ViewModels
                     var newRules = win.ResultConditions;
                     IsBusy = true;
                     StatusMessage = isAppTab ? "Applying APP Colors..." : "Applying Main Colors...";
-
                     await Task.Run(async () =>
                     {
-                        if (isAppTab)
-                        {
-                            // === לוגיקה עבור APP ===
-                            _appColoringRules = newRules;
-
-                            if (_allAppLogsCache != null)
-                            {
-                                // True = APP Mode (רק שגיאות, איפוס כל השאר)
-                                await _coloringService.ApplyDefaultColorsAsync(_allAppLogsCache, true);
-                                await _coloringService.ApplyCustomColoringAsync(_allAppLogsCache, _appColoringRules);
-                            }
-                        }
-                        else
-                        {
-                            // === לוגיקה עבור LOGS (ראשי) ===
-                            _mainColoringRules = newRules;
-
-                            if (_allLogsCache != null)
-                            {
-                                // False = Main Mode (סט צבעים מלא)
-                                await _coloringService.ApplyDefaultColorsAsync(_allLogsCache, false);
-                                await _coloringService.ApplyCustomColoringAsync(_allLogsCache, _mainColoringRules);
-                            }
-                        }
+                        if (isAppTab) { _appColoringRules = newRules; if (_allAppLogsCache != null) { await _coloringService.ApplyDefaultColorsAsync(_allAppLogsCache, true); await _coloringService.ApplyCustomColoringAsync(_allAppLogsCache, _appColoringRules); } }
+                        else { _mainColoringRules = newRules; if (_allLogsCache != null) { await _coloringService.ApplyDefaultColorsAsync(_allLogsCache, false); await _coloringService.ApplyCustomColoringAsync(_allLogsCache, _mainColoringRules); } }
                     });
-
-                    // רענון התצוגה (UI Refresh)
-                    Application.Current.Dispatcher.Invoke(() =>
-                    {
-                        if (isAppTab)
-                        {
-                            if (AppDevLogsFiltered != null)
-                            {
-                                foreach (var log in AppDevLogsFiltered) log.OnPropertyChanged("RowBackground");
-                            }
-                        }
-                        else
-                        {
-                            if (Logs != null)
-                            {
-                                foreach (var log in Logs) log.OnPropertyChanged("RowBackground");
-                            }
-                        }
-                    });
-
-                    IsBusy = false;
-                    StatusMessage = "Colors Updated.";
+                    Application.Current.Dispatcher.Invoke(() => { if (isAppTab) { if (AppDevLogsFiltered != null) foreach (var log in AppDevLogsFiltered) log.OnPropertyChanged("RowBackground"); } else { if (Logs != null) foreach (var log in Logs) log.OnPropertyChanged("RowBackground"); } });
+                    IsBusy = false; StatusMessage = "Colors Updated.";
                 }
             }
-            catch (Exception ex)
-            {
-                MessageBox.Show($"Error: {ex.Message}");
-                IsBusy = false;
-            }
+            catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}"); IsBusy = false; }
         }
         private void MarkRow(object obj)
         {
             if (SelectedLog != null)
             {
                 SelectedLog.IsMarked = !SelectedLog.IsMarked;
-                if (SelectedLog.IsMarked)
-                {
-                    MarkedLogs.Add(SelectedLog);
-                    var sorted = MarkedLogs.OrderBy(x => x.Date).ToList();
-                    MarkedLogs.Clear();
-                    foreach (var l in sorted) MarkedLogs.Add(l);
-                }
-                else
-                {
-                    MarkedLogs.Remove(SelectedLog);
-                }
+                bool isAppTab = SelectedTabIndex == 2;
+                var targetList = isAppTab ? MarkedAppLogs : MarkedLogs;
+                if (SelectedLog.IsMarked) { targetList.Add(SelectedLog); var sorted = targetList.OrderByDescending(x => x.Date).ToList(); targetList.Clear(); foreach (var l in sorted) targetList.Add(l); }
+                else { targetList.Remove(SelectedLog); }
             }
         }
 
@@ -1958,24 +1692,112 @@ namespace IndiLogs_3._0.ViewModels
         private void OpenSettingsWindow(object obj)
         {
             var win = new SettingsWindow { DataContext = this };
-            if (Application.Current.MainWindow != null && Application.Current.MainWindow != win) win.Owner = Application.Current.MainWindow;
-            win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+
+            // הגדרת הבעלים כדי שהחלון לא יברח אחורה
+            if (Application.Current.MainWindow != null && Application.Current.MainWindow != win)
+                win.Owner = Application.Current.MainWindow;
+
+            // חישוב המיקום לפי הכפתור שנלחץ
+            if (obj is FrameworkElement button)
+            {
+                // קבלת המיקום של הכפתור ביחס למסך
+                Point buttonPosition = button.PointToScreen(new Point(0, 0));
+
+                // הצבת החלון: ה-Left זהה לכפתור, ה-Top הוא מתחת לכפתור
+                win.Left = buttonPosition.X;
+                win.Top = buttonPosition.Y + button.ActualHeight;
+            }
+            else
+            {
+                // גיבוי למקרה שמשהו השתבש - למרכז
+                win.WindowStartupLocation = WindowStartupLocation.CenterOwner;
+            }
+
             win.Show();
         }
         private void OpenFontsWindow(object obj) { new FontsWindow { DataContext = this }.ShowDialog(); }
         private void UpdateContentFont(string fontName) { if (!string.IsNullOrEmpty(fontName) && Application.Current != null) UpdateResource(Application.Current.Resources, "ContentFontFamily", new FontFamily(fontName)); }
-        private void UpdateContentFontWeight(bool isBold) { if (Application.Current != null) UpdateResource(Application.Current.Resources, "ContentFontWeight", isBold ? FontWeights.Bold : FontWeights.Normal); }
-
+        private void UpdateContentFontWeight(bool isBold)
+        {
+            if (Application.Current != null)
+            {
+                // הוספנו System.Windows לפני FontWeights
+                UpdateResource(Application.Current.Resources, "ContentFontWeight",
+                    isBold ? System.Windows.FontWeights.Bold : System.Windows.FontWeights.Normal);
+            }
+        }
         private void OpenMarkedLogsWindow(object obj)
         {
-            if (_markedLogsWindow != null && _markedLogsWindow.IsVisible) { _markedLogsWindow.Activate(); return; }
-            _markedLogsWindow = new MarkedLogsWindow { DataContext = this };
-            _markedLogsWindow.Owner = Application.Current.MainWindow;
-            _markedLogsWindow.WindowStartupLocation = WindowStartupLocation.CenterOwner;
-            _markedLogsWindow.Closed += (s, e) => _markedLogsWindow = null;
-            _markedLogsWindow.Show();
+            // מצב 1: איחוד חלונות (Combined Mode)
+            if (IsMarkedLogsCombined)
+            {
+                if (_combinedMarkedWindow != null && _combinedMarkedWindow.IsVisible)
+                {
+                    _combinedMarkedWindow.Activate();
+                    return;
+                }
+
+                // יצירת רשימה מאוחדת: Main + App, ממויינת לפי תאריך יורד (החדש למעלה)
+                var combinedList = new List<LogEntry>();
+                if (MarkedLogs != null) combinedList.AddRange(MarkedLogs);
+                if (MarkedAppLogs != null) combinedList.AddRange(MarkedAppLogs);
+
+                // מיון: החדש ביותר (Date גדול יותר) למעלה
+                var sortedList = combinedList.OrderByDescending(x => x.Date).ToList();
+
+                // המרה ל-ObservableCollection כדי שהחלון יקבל את זה
+                var collectionToShow = new ObservableCollection<LogEntry>(sortedList);
+
+                _combinedMarkedWindow = new MarkedLogsWindow(collectionToShow, "Marked Lines (Combined - Main & App)");
+                _combinedMarkedWindow.DataContext = this;
+                _combinedMarkedWindow.Owner = Application.Current.MainWindow;
+                _combinedMarkedWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                _combinedMarkedWindow.Closed += (s, e) => _combinedMarkedWindow = null;
+                _combinedMarkedWindow.Show();
+            }
+            // מצב 2: חלונות נפרדים (Split Mode - הלוגיקה הישנה)
+            else
+            {
+                bool isAppTab = SelectedTabIndex == 2;
+
+                if (isAppTab)
+                {
+                    if (_markedAppLogsWindow != null && _markedAppLogsWindow.IsVisible)
+                    {
+                        _markedAppLogsWindow.Activate();
+                        return;
+                    }
+                    _markedAppLogsWindow = new MarkedLogsWindow(MarkedAppLogs, "Marked Lines (APP)");
+                    _markedAppLogsWindow.DataContext = this;
+                    _markedAppLogsWindow.Owner = Application.Current.MainWindow;
+                    _markedAppLogsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    _markedAppLogsWindow.Closed += (s, e) => _markedAppLogsWindow = null;
+                    _markedAppLogsWindow.Show();
+                }
+                else
+                {
+                    if (_markedMainLogsWindow != null && _markedMainLogsWindow.IsVisible)
+                    {
+                        _markedMainLogsWindow.Activate();
+                        return;
+                    }
+                    _markedMainLogsWindow = new MarkedLogsWindow(MarkedLogs, "Marked Lines (LOGS)");
+                    _markedMainLogsWindow.DataContext = this;
+                    _markedMainLogsWindow.Owner = Application.Current.MainWindow;
+                    _markedMainLogsWindow.WindowStartupLocation = WindowStartupLocation.CenterScreen;
+                    _markedMainLogsWindow.Closed += (s, e) => _markedMainLogsWindow = null;
+                    _markedMainLogsWindow.Show();
+                }
+            }
         }
 
+        // פונקציית עזר לסגירת החלונות (מופעלת כשמשנים את הצ'קבוקס)
+        private void CloseAllMarkedWindows()
+        {
+            if (_combinedMarkedWindow != null) { _combinedMarkedWindow.Close(); _combinedMarkedWindow = null; }
+            if (_markedMainLogsWindow != null) { _markedMainLogsWindow.Close(); _markedMainLogsWindow = null; }
+            if (_markedAppLogsWindow != null) { _markedAppLogsWindow.Close(); _markedAppLogsWindow = null; }
+        }   
         private bool IsDefaultLog(LogEntry l)
         {
             if (string.Equals(l.Level, "Error", StringComparison.OrdinalIgnoreCase)) return true;
@@ -1991,12 +1813,7 @@ namespace IndiLogs_3._0.ViewModels
         private void OpenKibana(object obj) { }
         private void OpenGraphViewer(object obj)
         {
-            try
-            {
-                string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IoRecorderViewer.exe");
-                if (File.Exists(exePath)) Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true, WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory });
-                else MessageBox.Show($"File not found:\n{exePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
+            try { string exePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "IoRecorderViewer.exe"); if (File.Exists(exePath)) Process.Start(new ProcessStartInfo(exePath) { UseShellExecute = true, WorkingDirectory = AppDomain.CurrentDomain.BaseDirectory }); else MessageBox.Show($"File not found:\n{exePath}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
             catch (Exception ex) { MessageBox.Show($"Error: {ex.Message}", "Error", MessageBoxButton.OK, MessageBoxImage.Error); }
         }
 

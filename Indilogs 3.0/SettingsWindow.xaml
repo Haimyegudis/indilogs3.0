@@ -1,7 +1,9 @@
 ﻿<Window x:Class="IndiLogs_3._0.Views.SettingsWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Settings" Height="280" Width="250"
+        Title="Settings" 
+        Width="250"
+        SizeToContent="Height" 
         WindowStyle="None"
         AllowsTransparency="True"
         Background="Transparent"
@@ -36,6 +38,17 @@
 
             <Separator Background="{DynamicResource BorderColor}" Margin="0,10"/>
 
+            <TextBlock Text="Behavior" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,5"/>
+
+            <CheckBox Content="Combine Marked Windows" 
+                      IsChecked="{Binding IsMarkedLogsCombined}"
+                      Foreground="{DynamicResource TextPrimary}"
+                      FontSize="12"
+                      Margin="5,0,0,5"
+                      ToolTip="If checked: Main and App marked logs will be shown in one merged window."/>
+
+            <Separator Background="{DynamicResource BorderColor}" Margin="0,10"/>
+
             <TextBlock Text="Context Filter Range" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="0,0,0,5"/>
             <Grid Margin="0,5">
                 <Grid.ColumnDefinitions>
@@ -45,16 +58,14 @@
                 </Grid.ColumnDefinitions>
 
                 <Slider Grid.Column="0" Minimum="1" Maximum="60" Value="{Binding ContextSeconds}" TickFrequency="1" IsSnapToTickEnabled="True" VerticalAlignment="Center"/>
-
                 <TextBox Grid.Column="1" Text="{Binding ContextSeconds}" Background="{DynamicResource BgCard}" Foreground="{DynamicResource TextPrimary}" BorderThickness="0" TextAlignment="Center" VerticalAlignment="Center" Margin="5,0,0,0"/>
-
                 <ComboBox Grid.Column="2" 
-              ItemsSource="{Binding TimeUnits}" 
-              SelectedItem="{Binding SelectedTimeUnit}"
-              Margin="5,0,0,0"
-              VerticalAlignment="Center"
-              FontSize="11"
-              Padding="4"/>
+                      ItemsSource="{Binding TimeUnits}" 
+                      SelectedItem="{Binding SelectedTimeUnit}"
+                      Margin="5,0,0,0"
+                      VerticalAlignment="Center"
+                      FontSize="11"
+                      Padding="4"/>
             </Grid>
 
             <Separator Background="{DynamicResource BorderColor}" Margin="0,10"/>

@@ -1,6 +1,7 @@
 ﻿using IndiLogs_3._0.Models;
 using IndiLogs_3._0.ViewModels;
 using System;
+using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Windows;
@@ -12,6 +13,7 @@ namespace IndiLogs_3._0
 {
     public partial class MainWindow : Window
     {
+        public ObservableCollection<LogEntry> MarkedAppLogs { get; set; }
         private Point _lastMousePosition;
         private bool _isDragging;
 

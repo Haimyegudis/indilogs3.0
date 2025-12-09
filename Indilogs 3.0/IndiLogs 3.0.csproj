@@ -29,7 +29,7 @@
     <UpdateRequired>false</UpdateRequired>
     <MapFileExtensions>true</MapFileExtensions>
     <InstallUrl>\\iihome.inr.rd.hpicorp.net\softwareqa%24\QA-Utils\Indilogs\</InstallUrl>
-    <ApplicationRevision>9</ApplicationRevision>
+    <ApplicationRevision>10</ApplicationRevision>
     <ApplicationVersion>1.0.0.%2a</ApplicationVersion>
     <UseApplicationTrust>false</UseApplicationTrust>
     <PublishWizardCompleted>true</PublishWizardCompleted>
@@ -79,6 +79,16 @@
     <Reference Include="CsvHelper.Excel, Version=27.2.1.0, Culture=neutral, processorArchitecture=MSIL">
       <HintPath>..\packages\CsvHelper.Excel.Core.27.2.1\lib\netstandard2.0\CsvHelper.Excel.dll</HintPath>
     </Reference>
+    <Reference Include="OxyPlot, Version=2.2.0.0, Culture=neutral, PublicKeyToken=638079a8f0bd61e9, processorArchitecture=MSIL">
+      <HintPath>..\packages\OxyPlot.Core.2.2.0\lib\net462\OxyPlot.dll</HintPath>
+    </Reference>
+    <Reference Include="OxyPlot.Wpf, Version=2.2.0.0, Culture=neutral, PublicKeyToken=75e952ba404cdbb0, processorArchitecture=MSIL">
+      <HintPath>..\packages\OxyPlot.Wpf.2.2.0\lib\net462\OxyPlot.Wpf.dll</HintPath>
+    </Reference>
+    <Reference Include="OxyPlot.Wpf.Shared, Version=2.2.0.0, Culture=neutral, PublicKeyToken=75e952ba404cdbb0, processorArchitecture=MSIL">
+      <HintPath>..\packages\OxyPlot.Wpf.Shared.2.2.0\lib\net462\OxyPlot.Wpf.Shared.dll</HintPath>
+    </Reference>
+    <Reference Include="ReachFramework" />
     <Reference Include="System" />
     <Reference Include="System.Core" />
     <Reference Include="System.Data" />
@@ -87,6 +97,7 @@
     <Reference Include="System.IO.Compression" />
     <Reference Include="System.IO.Compression.FileSystem" />
     <Reference Include="System.Numerics" />
+    <Reference Include="System.Printing" />
     <Reference Include="System.Windows.Forms" />
     <Reference Include="System.Xml" />
     <Reference Include="Microsoft.CSharp" />
@@ -169,10 +180,19 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </ApplicationDefinition>
+    <Compile Include="Converters\ArrayConverter.cs" />
+    <Compile Include="Converters\OxyColorToBrushConverter.cs" />
+    <Compile Include="Models\GraphModels.cs" />
     <Compile Include="Models\LoggerNode.cs" />
     <Compile Include="Models\StateEntry.cs" />
     <Compile Include="Models\Views\ColorPaletteWindow.xaml.cs">
       <DependentUpon>ColorPaletteWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Models\Views\FloatingChartWindow.xaml.cs">
+      <DependentUpon>FloatingChartWindow.xaml</DependentUpon>
+    </Compile>
+    <Compile Include="Models\Views\GraphsView.xaml.cs">
+      <DependentUpon>GraphsView.xaml</DependentUpon>
     </Compile>
     <Compile Include="Models\Views\MarkedLogsWindow.xaml.cs">
       <DependentUpon>MarkedLogsWindow.xaml</DependentUpon>
@@ -213,6 +233,7 @@
       <DependentUpon>SaveConfigWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Services\GetReadyAnalyzer.cs" />
+    <Compile Include="Services\GraphService.cs" />
     <Compile Include="Services\ILogAnalyzer.cs" />
     <Compile Include="Services\LogColoringService.cs" />
     <Compile Include="Services\LogFileService.cs" />
@@ -230,6 +251,7 @@
     <Compile Include="Models\Views\AnalysisReportWindow.xaml.cs">
       <DependentUpon>AnalysisReportWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="ViewModels\GraphsViewModel.cs" />
     <Compile Include="ViewModels\MainViewModel.cs" />
     <Compile Include="ViewModels\RelayCommand.cs" />
     <Compile Include="App.xaml.cs">
@@ -269,6 +291,14 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Models\Views\FilterWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Models\Views\FloatingChartWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Models\Views\GraphsView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -358,4 +388,11 @@
     </ItemGroup>
   </Target>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
+  <Import Project="..\packages\Microsoft.NETFramework.ReferenceAssemblies.net48.1.0.2\build\Microsoft.NETFramework.ReferenceAssemblies.net48.targets" Condition="Exists('..\packages\Microsoft.NETFramework.ReferenceAssemblies.net48.1.0.2\build\Microsoft.NETFramework.ReferenceAssemblies.net48.targets')" />
+  <Target Name="EnsureNuGetPackageBuildImports" BeforeTargets="PrepareForBuild">
+    <PropertyGroup>
+      <ErrorText>This project references NuGet package(s) that are missing on this computer. Use NuGet Package Restore to download them.  For more information, see http://go.microsoft.com/fwlink/?LinkID=322105. The missing file is {0}.</ErrorText>
+    </PropertyGroup>
+    <Error Condition="!Exists('..\packages\Microsoft.NETFramework.ReferenceAssemblies.net48.1.0.2\build\Microsoft.NETFramework.ReferenceAssemblies.net48.targets')" Text="$([System.String]::Format('$(ErrorText)', '..\packages\Microsoft.NETFramework.ReferenceAssemblies.net48.1.0.2\build\Microsoft.NETFramework.ReferenceAssemblies.net48.targets'))" />
+  </Target>
 </Project>

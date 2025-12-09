@@ -17,7 +17,7 @@ namespace IndiLogs_3._0.Services
 {
     public class LogFileService
     {
-        // Regex מותאם לפורמט APPDEV
+        // Regex מותאם לפורמט APPDEV (וכעת גם ל-PRESS.HOST.APP)
         private const string AppDevRegexPattern =
             @"(?<Timestamp>\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2},\d{3})\x1e" +
             @"(?<Thread>[^\x1e]*)\x1e" +
@@ -42,7 +42,6 @@ namespace IndiLogs_3._0.Services
                 var session = new LogSessionData();
                 if (filePaths == null || filePaths.Length == 0) return session;
 
-                // שימוש באוספים בטוחים לשימוש במקביל (Thread-Safe)
                 var logsBag = new ConcurrentBag<LogEntry>();
                 var appDevLogsBag = new ConcurrentBag<LogEntry>();
                 var eventsBag = new ConcurrentBag<EventEntry>();
@@ -71,7 +70,6 @@ namespace IndiLogs_3._0.Services
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var archive = new ZipArchive(fs, ZipArchiveMode.Read))
                             {
-                                // שלב 1: מיפוי וחילוץ לזיכרון
                                 var filesToProcess = new List<ZipEntryData>();
                                 long totalEntries = archive.Entries.Count;
                                 long extractedCount = 0;
@@ -79,12 +77,10 @@ namespace IndiLogs_3._0.Services
                                 foreach (var entry in archive.Entries)
                                 {
                                     extractedCount++;
-
-                                    // עדכון התקדמות רציף בזמן החילוץ (50% מהמשקל)
                                     if (extractedCount % 10 == 0)
                                     {
                                         double extractRatio = (double)extractedCount / totalEntries;
-                                        double fileProgress = (extractRatio * 0.5) * currentFileSize; // Max 50%
+                                        double fileProgress = (extractRatio * 0.5) * currentFileSize;
                                         double totalPercent = ((processedBytesGlobal + fileProgress) / totalBytesAllFiles) * 100;
                                         progress?.Report((Math.Min(99, totalPercent), $"Extracting: {entry.Name}"));
                                     }
@@ -92,11 +88,16 @@ namespace IndiLogs_3._0.Services
                                     if (entry.Length == 0) continue;
 
                                     var entryData = new ZipEntryData { Name = entry.Name };
+
+                                    // --- שינוי 1: זיהוי קבצים בתוך ZIP ---
                                     bool isAppDevPath = entry.FullName.IndexOf("IndigoLogs/Logger Files", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                         entry.FullName.IndexOf("IndigoLogs\\Logger Files", StringComparison.OrdinalIgnoreCase) >= 0;
-                                    bool isAppDevName = entry.Name.ToUpper().Contains("APPDEV");
 
-                                    if (isAppDevPath && isAppDevName)
+                                    // בדיקה אם השם מכיל APPDEV או PRESS.HOST.APP
+                                    bool isAppLogName = entry.Name.IndexOf("APPDEV", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                        entry.Name.IndexOf("PRESS.HOST.APP", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                    if (isAppDevPath && isAppLogName)
                                     {
                                         entryData.Type = FileType.AppDevLog;
                                         entryData.Stream = CopyToMemory(entry);
@@ -139,7 +140,6 @@ namespace IndiLogs_3._0.Services
                                     }
                                 }
 
-                                // שלב 2: עיבוד מקבילי (50% הנותרים)
                                 int totalFilesToParse = filesToProcess.Count;
                                 int processedCount = 0;
 
@@ -161,12 +161,10 @@ namespace IndiLogs_3._0.Services
                                         }
                                     }
 
-                                    // עדכון התקדמות בזמן העיבוד המקבילי
                                     int current = Interlocked.Increment(ref processedCount);
                                     if (current % 5 == 0 || current == totalFilesToParse)
                                     {
                                         double parseRatio = (double)current / totalFilesToParse;
-                                        // מוסיפים את ה-50% שכבר בוצעו בשלב החילוץ
                                         double fileProgress = (0.5 + (parseRatio * 0.5)) * currentFileSize;
                                         double totalPercent = ((processedBytesGlobal + fileProgress) / totalBytesAllFiles) * 100;
                                         progress?.Report((Math.Min(99, totalPercent), $"Parsing: {current}/{totalFilesToParse}"));
@@ -176,14 +174,17 @@ namespace IndiLogs_3._0.Services
                         }
                         else
                         {
-                            // קובץ בודד
+                            // --- שינוי 2: זיהוי קבצים בודדים (לא ב-ZIP) ---
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var ms = new MemoryStream())
                             {
                                 fs.CopyTo(ms);
                                 ms.Position = 0;
 
-                                if (fileName.ToUpper().Contains("APPDEV"))
+                                bool isAppLog = fileName.IndexOf("APPDEV", StringComparison.OrdinalIgnoreCase) >= 0 ||
+                                                fileName.IndexOf("PRESS.HOST.APP", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                if (isAppLog)
                                     foreach (var l in ParseAppDevLogStream(ms)) appDevLogsBag.Add(l);
                                 else
                                     foreach (var l in ParseLogStream(ms)) logsBag.Add(l);
@@ -196,7 +197,10 @@ namespace IndiLogs_3._0.Services
                     progress?.Report((98, "Sorting..."));
 
                     session.Logs = logsBag.OrderByDescending(x => x.Date).ToList();
+
+                    // המיון כאן מבטיח שהחדש למעלה והישן למטה
                     session.AppDevLogs = appDevLogsBag.OrderByDescending(x => x.Date).ToList();
+
                     session.Events = eventsBag.OrderByDescending(x => x.Time).ToList();
                     session.Screenshots = screenshotsBag.ToList();
 
@@ -258,7 +262,6 @@ namespace IndiLogs_3._0.Services
 
             string timestampStr = match.Groups["Timestamp"].Value;
 
-            // תמיכה בפורמט תאריך עם פסיק (חשוב!)
             if (!DateTime.TryParseExact(timestampStr, "yyyy-MM-dd HH:mm:ss,fff",
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out DateTime date))
@@ -280,7 +283,7 @@ namespace IndiLogs_3._0.Services
                 Level = match.Groups["Level"].Value.ToUpper(),
                 Logger = match.Groups["Logger"].Value,
                 Message = message,
-                ProcessName = "APPDEV"
+                ProcessName = "APP" // סימון שזה לוג של האפליקציה
             };
         }
 

@@ -2,13 +2,19 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         Title="Marked Log Lines" 
-        Height="400" Width="700"
+        Height="550" Width="800"
         WindowStartupLocation="Manual" 
         Background="{DynamicResource BgDark}"
         ResizeMode="CanResizeWithGrip">
 
     <Grid>
-        <ListBox x:Name="MarkedList"
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="150"/>
+        </Grid.RowDefinitions>
+
+        <ListBox x:Name="MarkedList" Grid.Row="0"
                  ItemsSource="{Binding MarkedLogs}" 
                  Background="{DynamicResource BgCard}" 
                  BorderThickness="0" 
@@ -43,11 +49,77 @@
                 </DataTemplate>
             </ListBox.ItemTemplate>
 
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="5,2"/>
+                    <Setter Property="Cursor" Value="Hand"/>
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#3E3E42"/>
+                        </Trigger>
+                        <Trigger Property="IsSelected" Value="True">
+                            <Setter Property="Background" Value="{DynamicResource PrimaryColor}"/>
+                            <Setter Property="Foreground" Value="White"/>
+                            <Setter Property="FontWeight" Value="SemiBold"/>
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </ListBox.ItemContainerStyle>
+
             <ListBox.InputBindings>
                 <MouseBinding Gesture="LeftDoubleClick" 
                               Command="{Binding DataContext.JumpToLogCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
                               CommandParameter="{Binding}"/>
             </ListBox.InputBindings>
         </ListBox>
+
+        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#444" ShowsPreview="True"/>
+
+        <Border Grid.Row="2" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,1,0,0">
+            <Grid DataContext="{Binding SelectedItem, ElementName=MarkedList}">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <Border Grid.Row="0" Background="{DynamicResource BgCard}" Padding="10,5" BorderThickness="0,0,0,1" BorderBrush="{DynamicResource BorderColor}">
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Full Message Details" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" Margin="0,0,15,0"/>
+
+                        <StackPanel Orientation="Horizontal">
+                            <StackPanel.Style>
+                                <Style TargetType="StackPanel">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                    <Style.Triggers>
+                                        <DataTrigger Binding="{Binding}" Value="{x:Null}">
+                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                        </DataTrigger>
+                                    </Style.Triggers>
+                                </Style>
+                            </StackPanel.Style>
+
+                            <TextBlock Text="{Binding Date, StringFormat='yyyy-MM-dd HH:mm:ss.fff'}" Foreground="{DynamicResource TextPrimary}" Margin="0,0,10,0"/>
+                            <TextBlock Text="|" Foreground="{DynamicResource BorderColor}" Margin="0,0,10,0"/>
+                            <TextBlock Text="{Binding Logger}" Foreground="{DynamicResource TextPrimary}" FontStyle="Italic"/>
+                        </StackPanel>
+                    </StackPanel>
+                </Border>
+
+                <TextBox Grid.Row="1"
+                         Text="{Binding Message, Mode=OneWay, TargetNullValue='Select a row to view details...'}"
+                         IsReadOnly="True"
+                         TextWrapping="Wrap"
+                         VerticalScrollBarVisibility="Auto"
+                         HorizontalScrollBarVisibility="Auto"
+                         AcceptsReturn="True"
+                         FontFamily="Consolas"
+                         FontSize="13"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Padding="10"
+                         Foreground="{DynamicResource TextPrimary}"/>
+            </Grid>
+        </Border>
+
     </Grid>
 </Window>
