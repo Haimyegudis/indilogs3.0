@@ -1,11 +1,10 @@
 ﻿using IndiLogs_3._0.Models;
 using IndiLogs_3._0.Services;
-using IndiLogs_3._0.Views;
 using OxyPlot;
 using OxyPlot.Axes;
 using OxyPlot.Series;
-using OxyPlot.Legends;
 using OxyPlot.Annotations;
+using OxyPlot.Legends;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
@@ -21,10 +20,15 @@ namespace IndiLogs_3._0.ViewModels
 {
     public class SingleChartViewModel : INotifyPropertyChanged
     {
+        public string Id { get; } = Guid.NewGuid().ToString();
         private PlotModel _model;
         public PlotModel Model { get => _model; set { _model = value; OnPropertyChanged(); } }
         public PlotController Controller { get; private set; }
-        public string Title { get; set; }
+        private string _title;
+        public string Title { get => _title; set { _title = value; OnPropertyChanged(); } }
+        private string _originalTitle;
+
+        public ObservableCollection<string> PlottedKeys { get; set; } = new ObservableCollection<string>();
 
         private bool _isActive;
         public bool IsActive
@@ -33,16 +37,18 @@ namespace IndiLogs_3._0.ViewModels
             set
             {
                 _isActive = value;
-                BorderColor = value ? OxyColors.CornflowerBlue : OxyColors.Gray;
-                OnPropertyChanged();
-                OnPropertyChanged(nameof(BorderThickness));
-                OnPropertyChanged(nameof(BorderColor));
+                BorderColor = value ? "#3B82F6" : "#CCCCCC";
+                BorderThickness = value ? new Thickness(2) : new Thickness(1);
+                OnPropertyChanged(); OnPropertyChanged(nameof(BorderColor)); OnPropertyChanged(nameof(BorderThickness));
             }
         }
 
-        public OxyColor BorderColor { get; set; } = OxyColors.Gray;
-        public Thickness BorderThickness => IsActive ? new Thickness(2) : new Thickness(1);
+        public string BorderColor { get; set; } = "#CCCCCC";
+        public Thickness BorderThickness { get; set; } = new Thickness(1);
         public ICommand FloatCommand { get; set; }
+
+        private LineAnnotation _cursorX;
+        private LineAnnotation _cursorY;
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
@@ -50,22 +56,87 @@ namespace IndiLogs_3._0.ViewModels
         public SingleChartViewModel(string title)
         {
             Title = title;
+            _originalTitle = title;
             CreateNewModel();
+
             Controller = new PlotController();
-            Controller.UnbindAll();
             Controller.BindMouseDown(OxyMouseButton.Left, PlotCommands.PanAt);
-            Controller.BindMouseWheel(PlotCommands.ZoomWheelFine);
+            Controller.BindMouseDown(OxyMouseButton.Left, OxyModifierKeys.Control, PlotCommands.ZoomRectangle);
             Controller.BindMouseDown(OxyMouseButton.Left, OxyModifierKeys.None, 2, PlotCommands.ResetAt);
+
+            Controller.BindMouseWheel(new DelegatePlotCommand<OxyMouseWheelEventArgs>((view, controller, args) =>
+            {
+                double factor = args.Delta > 0 ? 1.5 : 1 / 1.5;
+                foreach (var axis in view.ActualModel.Axes)
+                {
+                    if (axis.IsHorizontal()) axis.ZoomAt(factor, args.Position.X);
+                    else axis.ZoomAt(factor, args.Position.Y);
+                }
+                view.InvalidatePlot(false);
+            }));
         }
 
         public void CreateNewModel()
         {
-            Model = new PlotModel { TextColor = OxyColors.White, PlotAreaBorderColor = OxyColors.Gray, Background = OxyColors.Transparent };
-            Model.Legends.Add(new Legend { LegendPosition = LegendPosition.TopRight, LegendTextColor = OxyColors.White, LegendBackground = OxyColor.FromAColor(200, OxyColors.Black), LegendBorder = OxyColors.Gray });
+            Model = new PlotModel { TextColor = OxyColors.Black, PlotAreaBorderColor = OxyColors.Gray, Background = OxyColors.White };
 
-            // BLACK text for axes
-            Model.Axes.Add(new LinearAxis { Position = AxisPosition.Left, TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, MinorGridlineStyle = LineStyle.Dot, TicklineColor = OxyColors.Black, AxislineColor = OxyColors.Black, Key = "Y" });
-            Model.Axes.Add(new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, TicklineColor = OxyColors.Black, AxislineColor = OxyColors.Black, Key = "X" });
+            Model.Legends.Add(new Legend
+            {
+                LegendPosition = LegendPosition.TopRight,
+                LegendTextColor = OxyColors.Black,
+                LegendBackground = OxyColor.FromAColor(200, OxyColors.White),
+                LegendBorder = OxyColors.Gray,
+                FontSize = 10
+            });
+
+            var yAxis = new LinearAxis { Position = AxisPosition.Left, TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, MajorGridlineColor = OxyColor.FromAColor(40, OxyColors.Black), Key = "Y" };
+            var xAxis = new DateTimeAxis { Position = AxisPosition.Bottom, StringFormat = "HH:mm:ss", TextColor = OxyColors.Black, MajorGridlineStyle = LineStyle.Solid, MajorGridlineColor = OxyColor.FromAColor(40, OxyColors.Black), Key = "X" };
+
+            Model.Axes.Add(yAxis);
+            Model.Axes.Add(xAxis);
+
+            // קו האפס
+            Model.Annotations.Add(new LineAnnotation
+            {
+                Type = LineAnnotationType.Horizontal,
+                Y = 0,
+                Color = OxyColors.Black,
+                StrokeThickness = 1.5,
+                LineStyle = LineStyle.Solid,
+                Layer = AnnotationLayer.BelowSeries,
+                Text = "0"
+            });
+
+            // --- תיקון שגיאות Visibility ---
+            // במקום Visibility, נשתמש ב-StrokeThickness=0 להסתרה
+            _cursorX = new LineAnnotation { Type = LineAnnotationType.Vertical, Color = OxyColors.Black, LineStyle = LineStyle.Dash, StrokeThickness = 0, Layer = AnnotationLayer.AboveSeries };
+            _cursorY = new LineAnnotation { Type = LineAnnotationType.Horizontal, Color = OxyColors.Black, LineStyle = LineStyle.Dash, StrokeThickness = 0, Layer = AnnotationLayer.AboveSeries };
+
+            Model.Annotations.Add(_cursorX);
+            Model.Annotations.Add(_cursorY);
+
+            Model.MouseMove += (s, e) =>
+            {
+                var xVal = xAxis.InverseTransform(e.Position.X);
+                var yVal = yAxis.InverseTransform(e.Position.Y);
+
+                // הצגת הקווים
+                _cursorX.X = xVal;
+                _cursorY.Y = yVal;
+                _cursorX.StrokeThickness = 1; // הופך לנראה
+                _cursorY.StrokeThickness = 1; // הופך לנראה
+
+                DateTime time = DateTimeAxis.ToDateTime(xVal);
+                Title = $"{_originalTitle}  |  Time: {time:HH:mm:ss.fff}  |  Value: {yVal:F3}";
+
+                Model.InvalidatePlot(false);
+            };
+        }
+
+        public void UpdateTitle(string newParams)
+        {
+            _originalTitle = newParams;
+            Title = newParams;
         }
     }
 
@@ -76,64 +147,86 @@ namespace IndiLogs_3._0.ViewModels
         private List<MachineStateSegment> _allStates;
 
         public ObservableCollection<SingleChartViewModel> Charts { get; set; } = new ObservableCollection<SingleChartViewModel>();
-        private List<SingleChartViewModel> _allActiveCharts = new List<SingleChartViewModel>();
-
         public ObservableCollection<GraphNode> ComponentTree { get; set; } = new ObservableCollection<GraphNode>();
-        public ObservableCollection<MachineStateSegment> StateList { get; set; } = new ObservableCollection<MachineStateSegment>();
+        public ObservableCollection<string> ActiveChartSignals { get; set; } = new ObservableCollection<string>();
+        public ObservableCollection<MachineStateSegment> StateTimeline { get; set; } = new ObservableCollection<MachineStateSegment>();
+        public ObservableCollection<AnalysisEvent> AnalysisResults { get; set; } = new ObservableCollection<AnalysisEvent>();
+
+        private string _selectedSignalToRemove;
+        public string SelectedSignalToRemove { get => _selectedSignalToRemove; set { _selectedSignalToRemove = value; OnPropertyChanged(); } }
 
         private SingleChartViewModel _selectedChart;
-        public SingleChartViewModel SelectedChart { get => _selectedChart; set { if (_selectedChart != null) _selectedChart.IsActive = false; _selectedChart = value; if (_selectedChart != null) _selectedChart.IsActive = true; OnPropertyChanged(); } }
-
-        private bool _isToolbarPinned = true;
-        public bool IsToolbarPinned { get => _isToolbarPinned; set { _isToolbarPinned = value; OnPropertyChanged(); IsToolbarVisible = value; } }
-        private bool _isToolbarVisible = true;
-        public bool IsToolbarVisible { get => _isToolbarVisible; set { _isToolbarVisible = value; OnPropertyChanged(); } }
+        public SingleChartViewModel SelectedChart
+        {
+            get => _selectedChart;
+            set
+            {
+                if (_selectedChart != null) _selectedChart.IsActive = false;
+                _selectedChart = value;
+                if (_selectedChart != null) { _selectedChart.IsActive = true; UpdateActiveSignalsList(); }
+                OnPropertyChanged();
+            }
+        }
 
         private string _status = "Ready";
         public string Status { get => _status; set { _status = value; OnPropertyChanged(); } }
 
-        private string _treeSearchText;
-        public string TreeSearchText { get => _treeSearchText; set { _treeSearchText = value; OnPropertyChanged(); FilterTree(_treeSearchText); } }
+        private string _searchText;
+        public string SearchText { get => _searchText; set { _searchText = value; OnPropertyChanged(); FilterTree(_searchText); } }
 
-        private DateTime _logStartTime;
-        private DateTime _logEndTime;
+        private DateTime _logStartTime, _logEndTime;
 
         private DateTime _filterStartTime;
-        public DateTime FilterStartTime { get => _filterStartTime; set { _filterStartTime = value; OnPropertyChanged(); } }
+        public DateTime FilterStartTime
+        {
+            get => _filterStartTime;
+            set { _filterStartTime = value; OnPropertyChanged(); OnPropertyChanged(nameof(StartTimeText)); }
+        }
 
         private DateTime _filterEndTime;
-        public DateTime FilterEndTime { get => _filterEndTime; set { _filterEndTime = value; OnPropertyChanged(); } }
+        public DateTime FilterEndTime
+        {
+            get => _filterEndTime;
+            set { _filterEndTime = value; OnPropertyChanged(); OnPropertyChanged(nameof(EndTimeText)); }
+        }
 
-        private DateTime _absoluteMinTime;
-        private DateTime _absoluteMaxTime;
-        private bool _isLockedToState = false;
+        public string StartTimeText
+        {
+            get => _filterStartTime.ToString("HH:mm:ss");
+            set { if (DateTime.TryParse(value, out DateTime dt)) FilterStartTime = _filterStartTime.Date + dt.TimeOfDay; }
+        }
+
+        public string EndTimeText
+        {
+            get => _filterEndTime.ToString("HH:mm:ss");
+            set { if (DateTime.TryParse(value, out DateTime dt)) FilterEndTime = _filterEndTime.Date + dt.TimeOfDay; }
+        }
 
         private DispatcherTimer _playbackTimer;
         private bool _isPlaying;
         public bool IsPlaying { get => _isPlaying; set { _isPlaying = value; OnPropertyChanged(); } }
 
         private double _playbackSpeed = 1.0;
-        public double PlaybackSpeed { get => _playbackSpeed; set { _playbackSpeed = value; OnPropertyChanged(); OnPropertyChanged(nameof(PlaybackSpeedText)); } }
         public string PlaybackSpeedText => $"{_playbackSpeed:0.0}x";
 
-        public ICommand SpeedUpCommand { get; }
-        public ICommand SpeedDownCommand { get; }
+        private bool _isMeasureMode;
+        public bool IsMeasureMode { get => _isMeasureMode; set { _isMeasureMode = value; OnPropertyChanged(); } }
+        private bool _isSyncing = false;
+
         public ICommand AddChartCommand { get; }
         public ICommand RemoveChartCommand { get; }
         public ICommand ClearChartCommand { get; }
-        public ICommand ToggleMeasureCommand { get; }
+        public ICommand AddSignalToActiveCommand { get; }
+        public ICommand RemoveSignalFromActiveCommand { get; }
         public ICommand ApplyTimeFilterCommand { get; }
         public ICommand ResetZoomCommand { get; }
-        public ICommand ZoomToStateCommand { get; }
-        public ICommand StepTimeCommand { get; }
         public ICommand PlayCommand { get; }
         public ICommand PauseCommand { get; }
-
-        private bool _isMeasureMode;
-        public bool IsMeasureMode { get => _isMeasureMode; set { _isMeasureMode = value; OnPropertyChanged(); Status = value ? "Click 1st point to start measure." : "Measurement mode off."; if (!value) ClearMeasurement(SelectedChart); } }
-        private DataPoint? _measureStart;
-        private bool _hasActiveMeasurement = false;
-        private bool _isSyncing = false;
+        public ICommand SpeedUpCommand { get; }
+        public ICommand SpeedDownCommand { get; }
+        public ICommand ZoomToStateCommand { get; }
+        public ICommand ClearAnalysisCommand { get; }
+        public ICommand ZoomToAnalysisEventCommand { get; }
 
         public GraphsViewModel()
         {
@@ -141,536 +234,411 @@ namespace IndiLogs_3._0.ViewModels
             _playbackTimer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(50) };
             _playbackTimer.Tick += OnPlaybackTick;
 
-            AddChartCommand = new RelayCommand(o => AddChart());
-            RemoveChartCommand = new RelayCommand(o => { if (SelectedChart != null && Charts.Count > 1) { RemoveChartSafe(SelectedChart); SelectedChart = Charts.FirstOrDefault(); } });
-            ClearChartCommand = new RelayCommand(o => { if (SelectedChart != null) { SelectedChart.Model.Series.Clear(); ClearMeasurement(SelectedChart); SelectedChart.Model.InvalidatePlot(true); SelectedChart.Title = "Empty Chart"; } });
-            ToggleMeasureCommand = new RelayCommand(o => IsMeasureMode = !IsMeasureMode);
+            AddChartCommand = new RelayCommand(o => AddNewChart());
+            RemoveChartCommand = new RelayCommand(o => RemoveSelectedChart());
+            ClearChartCommand = new RelayCommand(o => ClearSelectedChart());
+            AddSignalToActiveCommand = new RelayCommand(param => { if (param is string s) AddSignalToChart(s); });
+
+            RemoveSignalFromActiveCommand = new RelayCommand(param =>
+            {
+                string toRemove = param as string ?? SelectedSignalToRemove;
+                if (!string.IsNullOrEmpty(toRemove)) RemoveSignalFromChart(toRemove);
+            });
 
             ApplyTimeFilterCommand = new RelayCommand(o => ApplyTimeFilter());
             ResetZoomCommand = new RelayCommand(o => ResetZoom());
-            ZoomToStateCommand = new RelayCommand(ZoomToState);
-
-            StepTimeCommand = new RelayCommand(param =>
-            {
-                if (param is object[] args && args.Length == 2 && int.TryParse(args[1].ToString(), out int seconds))
-                {
-                    DateTime newStart = FilterStartTime;
-                    DateTime newEnd = FilterEndTime;
-
-                    if (args[0].ToString() == "Start")
-                    {
-                        newStart = newStart.AddSeconds(seconds);
-                        if (newStart >= FilterEndTime) newStart = FilterEndTime.AddSeconds(-1);
-                    }
-                    else
-                    {
-                        newEnd = newEnd.AddSeconds(seconds);
-                        if (newEnd <= FilterStartTime) newEnd = FilterStartTime.AddSeconds(1);
-                    }
-
-                    if (_isLockedToState)
-                    {
-                        if (newStart < _absoluteMinTime) newStart = _absoluteMinTime;
-                        if (newStart > _absoluteMaxTime) newStart = _absoluteMaxTime;
-                        if (newEnd < _absoluteMinTime) newEnd = _absoluteMinTime;
-                        if (newEnd > _absoluteMaxTime) newEnd = _absoluteMaxTime;
-                    }
-                    else
-                    {
-                        if (newStart < _logStartTime) newStart = _logStartTime;
-                        if (newStart > _logEndTime) newStart = _logEndTime;
-                        if (newEnd < _logStartTime) newEnd = _logStartTime;
-                        if (newEnd > _logEndTime) newEnd = _logEndTime;
-                    }
-
-                    FilterStartTime = newStart;
-                    FilterEndTime = newEnd;
-                }
-            });
-
             PlayCommand = new RelayCommand(o => StartPlayback());
             PauseCommand = new RelayCommand(o => StopPlayback());
             SpeedUpCommand = new RelayCommand(o => ChangeSpeed(true));
             SpeedDownCommand = new RelayCommand(o => ChangeSpeed(false));
+            ZoomToStateCommand = new RelayCommand(ZoomToState);
+            ZoomToAnalysisEventCommand = new RelayCommand(ZoomToAnalysisEvent);
+            ClearAnalysisCommand = new RelayCommand(o => { AnalysisResults.Clear(); foreach (var c in Charts) { ClearThresholdMarkers(c); c.Model.InvalidatePlot(true); } });
 
-            AddChart();
+            AddNewChart();
         }
 
-        // FIXED: Start playback from current view position
-        private void StartPlayback()
+        public async Task ProcessLogsAsync(IEnumerable<LogEntry> logs)
         {
-            if (_allActiveCharts.Count == 0 || _allData == null || _allData.Count == 0)
+            Status = "Processing Data...";
+            var result = await _graphService.ParseLogsToGraphDataAsync(logs);
+            _allData = result.Item1;
+            ComponentTree = result.Item2;
+            _allStates = result.Item3;
+
+            OnPropertyChanged(nameof(ComponentTree));
+
+            StateTimeline.Clear();
+            if (_allStates != null) foreach (var s in _allStates) StateTimeline.Add(s);
+
+            if (logs.Any())
             {
-                Status = "No data to play";
-                return;
+                var t1 = logs.First().Date;
+                var t2 = logs.Last().Date;
+                _logStartTime = t1 < t2 ? t1 : t2;
+                _logEndTime = t1 > t2 ? t1 : t2;
+
+                if ((_logEndTime - _logStartTime).TotalSeconds < 1) _logEndTime = _logStartTime.AddSeconds(1);
+
+                SetAbsoluteBounds(_logStartTime, _logEndTime);
+                ResetZoom();
             }
 
-            // Sync FilterStart/End with actual axis positions BEFORE starting
-            var firstChart = _allActiveCharts.FirstOrDefault();
-            if (firstChart != null)
-            {
-                var xAxis = firstChart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (xAxis != null)
-                {
-                    FilterStartTime = DateTimeAxis.ToDateTime(xAxis.ActualMinimum);
-                    FilterEndTime = DateTimeAxis.ToDateTime(xAxis.ActualMaximum);
-                }
-            }
-
-            IsPlaying = true;
-            _playbackTimer.Start();
-            Status = $"Playing from {FilterStartTime:HH:mm:ss}...";
+            foreach (var c in Charts) { c.Model.Annotations.Clear(); AddStateAnnotations(c.Model); c.Model.InvalidatePlot(true); }
+            Status = $"Loaded {_allData.Count} signals.";
         }
 
-        private void StopPlayback()
+        private void SetAbsoluteBounds(DateTime start, DateTime end)
         {
-            IsPlaying = false;
-            _playbackTimer.Stop();
-            Status = "Paused";
-        }
-
-        // Playback animation
-        private void OnPlaybackTick(object sender, EventArgs e)
-        {
-            double stepSeconds = 0.5 * PlaybackSpeed;
-            TimeSpan windowSize = FilterEndTime - FilterStartTime;
-
-            DateTime newStart = FilterStartTime.AddSeconds(stepSeconds);
-            DateTime newEnd = FilterEndTime.AddSeconds(stepSeconds);
-
-            DateTime limitEnd = _isLockedToState ? _absoluteMaxTime : _logEndTime;
-            DateTime limitStart = _isLockedToState ? _absoluteMinTime : _logStartTime;
-
-            if (newEnd > limitEnd)
-            {
-                newStart = limitStart;
-                newEnd = limitStart + windowSize;
-                if (newEnd > limitEnd) newEnd = limitEnd;
-            }
-
-            FilterStartTime = newStart;
-            FilterEndTime = newEnd;
-
-            double min = DateTimeAxis.ToDouble(newStart);
-            double max = DateTimeAxis.ToDouble(newEnd);
-
-            foreach (var chart in _allActiveCharts)
-            {
-                var xAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (xAxis != null) xAxis.Zoom(min, max);
-
-                AutoZoomYAxis(chart, min, max);
-                chart.Model.InvalidatePlot(true);
-            }
-        }
-
-        private void ResetZoom()
-        {
-            _isLockedToState = false;
-
-            foreach (var chart in _allActiveCharts)
-            {
-                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (ax != null)
-                {
-                    ax.AbsoluteMinimum = double.NaN;
-                    ax.AbsoluteMaximum = double.NaN;
-                }
-            }
-
-            FilterStartTime = _logStartTime;
-            FilterEndTime = _logEndTime;
-
-            UpdateGraphsView(_logStartTime, _logEndTime);
-
-            Status = "View reset to full log";
-        }
-
-        private void ApplyTimeFilter()
-        {
-            if (FilterStartTime >= FilterEndTime)
-            {
-                Status = "Invalid time range";
-                return;
-            }
-
-            UpdateGraphsView(FilterStartTime, FilterEndTime);
-            Status = $"View: {FilterStartTime:HH:mm:ss} → {FilterEndTime:HH:mm:ss}";
-        }
-
-        public void UpdateGraphsView(DateTime start, DateTime end)
-        {
-            if (start >= end) return;
-
-            FilterStartTime = start;
-            FilterEndTime = end;
-
             double min = DateTimeAxis.ToDouble(start);
             double max = DateTimeAxis.ToDouble(end);
+            if (max <= min) max = min + (1.0 / 86400.0);
 
-            foreach (var chart in _allActiveCharts)
+            foreach (var c in Charts)
             {
-                var xAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (xAxis != null) xAxis.Zoom(min, max);
-
-                AutoZoomYAxis(chart, min, max);
-                chart.Model.InvalidatePlot(true);
-            }
-        }
-
-        // Auto Y-axis zoom to visible data
-        private void AutoZoomYAxis(SingleChartViewModel chart, double minX, double maxX)
-        {
-            var yAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "Y");
-            if (yAxis == null || chart.Model.Series.Count == 0) return;
-
-            double yMin = double.MaxValue;
-            double yMax = double.MinValue;
-            bool foundData = false;
-
-            foreach (var series in chart.Model.Series.OfType<LineSeries>())
-            {
-                var visiblePoints = series.Points.Where(p => p.X >= minX && p.X <= maxX).ToList();
-
-                if (visiblePoints.Any())
-                {
-                    foundData = true;
-                    var minY = visiblePoints.Min(p => p.Y);
-                    var maxY = visiblePoints.Max(p => p.Y);
-
-                    if (minY < yMin) yMin = minY;
-                    if (maxY > yMax) yMax = maxY;
-                }
-            }
-
-            if (foundData && yMin != double.MaxValue && yMax != double.MinValue)
-            {
-                double padding = (yMax - yMin) * 0.1;
-                if (padding == 0 || double.IsNaN(padding)) padding = 1.0;
-
-                yAxis.Zoom(yMin - padding, yMax + padding);
-            }
-            else
-            {
-                yAxis.Reset();
+                var xAxis = c.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (xAxis != null) { xAxis.AbsoluteMinimum = min; xAxis.AbsoluteMaximum = max; }
             }
         }
 
         public void SetTimeRange(DateTime start, DateTime end)
         {
-            _isLockedToState = true;
-            _absoluteMinTime = start;
-            _absoluteMaxTime = end;
-
-            double absMin = DateTimeAxis.ToDouble(start);
-            double absMax = DateTimeAxis.ToDouble(end);
-
-            foreach (var chart in _allActiveCharts)
-            {
-                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                if (ax != null)
-                {
-                    ax.AbsoluteMinimum = absMin;
-                    ax.AbsoluteMaximum = absMax;
-                }
-            }
-
+            if (end <= start) end = start.AddMilliseconds(500);
+            SetAbsoluteBounds(start, end);
             FilterStartTime = start;
             FilterEndTime = end;
             UpdateGraphsView(start, end);
-
-            Status = $"Locked to state bounds: {start:HH:mm:ss} → {end:HH:mm:ss}";
         }
 
-        private void ZoomToState(object param)
+        private void FilterTree(string text)
         {
-            if (param is MachineStateSegment state)
+            if (ComponentTree == null) return;
+            foreach (var node in ComponentTree) FilterNodeRecursive(node, text);
+        }
+
+        private bool FilterNodeRecursive(GraphNode node, string text)
+        {
+            bool match = string.IsNullOrEmpty(text) || node.Name.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0;
+            bool childMatch = false;
+            foreach (var child in node.Children)
             {
-                SetTimeRange(DateTimeAxis.ToDateTime(state.Start), DateTimeAxis.ToDateTime(state.End));
+                if (FilterNodeRecursive(child, text)) childMatch = true;
             }
+            if (childMatch) { node.IsVisible = true; node.IsExpanded = true; return true; }
+            node.IsVisible = match;
+            if (!match) node.IsExpanded = false;
+            return match;
+        }
+
+        private void AddNewChart()
+        {
+            if (Charts.Count >= 5) return;
+            var vm = new SingleChartViewModel($"Chart {Charts.Count + 1}");
+
+            if (_logStartTime != DateTime.MinValue)
+            {
+                var ax = vm.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (ax != null)
+                {
+                    ax.AbsoluteMinimum = DateTimeAxis.ToDouble(_logStartTime);
+                    ax.AbsoluteMaximum = DateTimeAxis.ToDouble(_logEndTime);
+                    ax.Zoom(DateTimeAxis.ToDouble(FilterStartTime), DateTimeAxis.ToDouble(FilterEndTime));
+                }
+            }
+
+            var xAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "X");
+            if (xAxis != null)
+            {
+                xAxis.AxisChanged += (s, e) =>
+                {
+                    SyncAxes(xAxis);
+                    UpdateStateLabelsVisibility(vm.Model);
+                };
+            }
+
+            if (_allStates != null) AddStateAnnotations(vm.Model);
+            Charts.Add(vm);
+            SelectedChart = vm;
+        }
+
+        private void RemoveSelectedChart() { if (SelectedChart != null && Charts.Count > 1) { Charts.Remove(SelectedChart); SelectedChart = Charts.FirstOrDefault(); } }
+        private void ClearSelectedChart() { if (SelectedChart != null) { SelectedChart.Model.Series.Clear(); SelectedChart.PlottedKeys.Clear(); ClearMeasurement(); SelectedChart.Model.InvalidatePlot(true); UpdateActiveSignalsList(); } }
+
+        public void AddSignalToChart(string key)
+        {
+            if (SelectedChart == null) { MessageBox.Show("Please select a chart first."); return; }
+            if (_allData == null || !_allData.ContainsKey(key)) { MessageBox.Show($"No data found for signal: {key}", "Warning", MessageBoxButton.OK, MessageBoxImage.Warning); return; }
+            if (SelectedChart.PlottedKeys.Contains(key)) return;
+
+            // --- תיקון CS0165: בדיקה מפורשת ללא pattern matching בתוך Lambda מורכב ---
+            bool hasStates = false;
+            foreach (var ann in SelectedChart.Model.Annotations)
+            {
+                if (ann is TextAnnotation ta)
+                {
+                    if (ta.Tag as string == "StateLabel" || ta.Tag is MachineStateSegment)
+                    {
+                        hasStates = true;
+                        break;
+                    }
+                }
+            }
+
+            if (!hasStates && _allStates != null)
+            {
+                AddStateAnnotations(SelectedChart.Model);
+            }
+
+            var points = _allData[key];
+            List<DataPoint> displayPoints = new List<DataPoint>();
+            if (points.Count > 5000)
+            {
+                int step = points.Count / 5000;
+                for (int i = 0; i < points.Count; i += step) displayPoints.Add(points[i]);
+            }
+            else { displayPoints = points; }
+
+            var darkColors = new[] { OxyColors.Blue, OxyColors.Red, OxyColors.Green, OxyColors.OrangeRed, OxyColors.Purple, OxyColors.Teal };
+            var lineColor = darkColors[SelectedChart.Model.Series.Count % darkColors.Length];
+            bool isSinglePoint = displayPoints.Count == 1;
+
+            var series = new LineSeries
+            {
+                Title = key.Split('.').Last(),
+                Tag = key,
+                Color = lineColor,
+                StrokeThickness = 2,
+                MarkerType = isSinglePoint ? MarkerType.Circle : MarkerType.None,
+                MarkerSize = isSinglePoint ? 4 : 0,
+                MarkerFill = isSinglePoint ? lineColor : OxyColors.Transparent,
+                MarkerStroke = isSinglePoint ? OxyColors.White : OxyColors.Transparent
+            };
+
+            series.Points.AddRange(displayPoints);
+            SelectedChart.Model.Series.Add(series);
+            SelectedChart.PlottedKeys.Add(key);
+
+            string newTitle = string.Join(", ", SelectedChart.Model.Series.OfType<LineSeries>().Select(s => s.Title));
+            SelectedChart.UpdateTitle(newTitle);
+
+            SelectedChart.Model.InvalidatePlot(true);
+            UpdateActiveSignalsList();
+            UpdateGraphsView(FilterStartTime, FilterEndTime);
+        }
+
+        public void RemoveSignalFromChart(string key)
+        {
+            if (SelectedChart == null) return;
+            var series = SelectedChart.Model.Series.FirstOrDefault(s => (string)s.Tag == key);
+            if (series != null)
+            {
+                SelectedChart.Model.Series.Remove(series);
+                SelectedChart.PlottedKeys.Remove(key);
+
+                string newTitle = string.Join(", ", SelectedChart.Model.Series.OfType<LineSeries>().Select(s => s.Title));
+                SelectedChart.UpdateTitle(newTitle);
+
+                SelectedChart.Model.InvalidatePlot(true);
+                UpdateActiveSignalsList();
+                UpdateGraphsView(FilterStartTime, FilterEndTime);
+            }
+        }
+
+        private void UpdateActiveSignalsList()
+        {
+            ActiveChartSignals.Clear();
+            if (SelectedChart != null) foreach (var k in SelectedChart.PlottedKeys) ActiveChartSignals.Add(k);
         }
 
         private void SyncAxes(Axis sourceAxis)
         {
             if (_isSyncing || IsPlaying) return;
             _isSyncing = true;
-
-            double newMin = sourceAxis.ActualMinimum;
-            double newMax = sourceAxis.ActualMaximum;
-
-            if (_isLockedToState)
+            try
             {
-                double absMin = DateTimeAxis.ToDouble(_absoluteMinTime);
-                double absMax = DateTimeAxis.ToDouble(_absoluteMaxTime);
-
-                if (newMin < absMin) newMin = absMin;
-                if (newMax > absMax) newMax = absMax;
+                FilterStartTime = DateTimeAxis.ToDateTime(sourceAxis.ActualMinimum);
+                FilterEndTime = DateTimeAxis.ToDateTime(sourceAxis.ActualMaximum);
             }
-
-            if (newMax > newMin)
+            catch { }
+            foreach (var chart in Charts)
             {
-                try
-                {
-                    FilterStartTime = DateTimeAxis.ToDateTime(newMin);
-                    FilterEndTime = DateTimeAxis.ToDateTime(newMax);
-                }
-                catch { }
-
-                foreach (var chart in _allActiveCharts)
-                {
-                    var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-                    if (ax != null && ax != sourceAxis)
-                    {
-                        ax.Zoom(newMin, newMax);
-                        AutoZoomYAxis(chart, newMin, newMax);
-                        chart.Model.InvalidatePlot(false);
-                    }
-                }
+                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (ax != null && ax != sourceAxis) { ax.Zoom(sourceAxis.ActualMinimum, sourceAxis.ActualMaximum); chart.Model.InvalidatePlot(false); }
+                AutoZoomYAxis(chart, sourceAxis.ActualMinimum, sourceAxis.ActualMaximum);
             }
             _isSyncing = false;
         }
 
-        private void OnPlotMouseMove(SingleChartViewModel vm, OxyMouseEventArgs e)
+        public void UpdateGraphsView(DateTime start, DateTime end)
         {
-            if (IsMeasureMode) return;
-            var xAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "X");
-            var yAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "Y");
-            if (xAxis == null || yAxis == null) return;
-
-            var point = Axis.InverseTransform(e.Position, xAxis, yAxis);
-            Status = $"T: {DateTimeAxis.ToDateTime(point.X):HH:mm:ss.fff} | Y: {point.Y:F3}";
-
-            var oldV = vm.Model.Annotations.FirstOrDefault(a => a.Tag == "CursorV");
-            var oldH = vm.Model.Annotations.FirstOrDefault(a => a.Tag == "CursorH");
-            if (oldV != null) vm.Model.Annotations.Remove(oldV);
-            if (oldH != null) vm.Model.Annotations.Remove(oldH);
-
-            var vLine = new LineAnnotation { Type = LineAnnotationType.Vertical, X = point.X, Color = OxyColors.White, StrokeThickness = 1, LineStyle = LineStyle.Dash, Tag = "CursorV", Layer = AnnotationLayer.AboveSeries };
-            var hLine = new LineAnnotation { Type = LineAnnotationType.Horizontal, Y = point.Y, Color = OxyColors.White, StrokeThickness = 1, LineStyle = LineStyle.Dash, Tag = "CursorH", Layer = AnnotationLayer.AboveSeries };
-
-            vm.Model.Annotations.Add(vLine);
-            vm.Model.Annotations.Add(hLine);
-            vm.Model.InvalidatePlot(false);
-        }
-
-        // FIXED: Update charts immediately after loading log
-        public async Task ProcessLogsAsync(IEnumerable<LogEntry> logs)
-        {
-            Status = "Processing Graph Data...";
-            var result = await _graphService.ParseLogsToGraphDataAsync(logs);
-            _allData = result.Item1;
-            ComponentTree = result.Item2;
-            _allStates = result.Item3;
-
-            if (logs.Any())
+            if (start >= end) return;
+            FilterStartTime = start; FilterEndTime = end;
+            double min = DateTimeAxis.ToDouble(start); double max = DateTimeAxis.ToDouble(end);
+            foreach (var chart in Charts)
             {
-                _logStartTime = logs.First().Date;
-                _logEndTime = logs.Last().Date;
-                FilterStartTime = _logStartTime;
-                FilterEndTime = _logEndTime;
-
-                // CRITICAL FIX: Update the charts immediately!
-                UpdateGraphsView(_logStartTime, _logEndTime);
-            }
-
-            StateList.Clear();
-            if (_allStates != null) foreach (var s in _allStates) StateList.Add(s);
-
-            foreach (var c in Charts)
-            {
-                c.Model.Annotations.Clear();
-                AddStateAnnotations(c.Model);
-            }
-
-            OnPropertyChanged(nameof(ComponentTree));
-            Status = $"Ready. Loaded {_allData.Keys.Count} signals. Time range: {_logStartTime:HH:mm:ss} → {_logEndTime:HH:mm:ss}";
-        }
-
-        public void AddSignalToChart(string fullPath)
-        {
-            if (SelectedChart == null)
-            {
-                MessageBox.Show("No chart selected.");
-                return;
-            }
-            if (_allData == null || !_allData.ContainsKey(fullPath))
-            {
-                return;
-            }
-
-            var points = _allData[fullPath];
-            if (points == null || points.Count == 0) return;
-
-            var parts = fullPath.Split('.');
-            string title = parts.Length >= 2 ? $"{parts[parts.Length - 2]}.{parts.Last()}" : parts.Last();
-
-            if (SelectedChart.Model.Series.Any(s => s.Title == title))
-            {
-                MessageBox.Show("Duplicate signal");
-                return;
-            }
-
-            var series = new LineSeries
-            {
-                Title = title,
-                Color = GetNextColor(SelectedChart.Model.Series.Count),
-                StrokeThickness = 2,
-                MarkerType = MarkerType.None
-            };
-
-            if (points.Count > 5000)
-                series.Decimator = (Action<List<ScreenPoint>, List<ScreenPoint>>)Decimator.Decimate;
-            else
-                series.Decimator = null;
-
-            series.Points.AddRange(points);
-            SelectedChart.Model.Series.Add(series);
-
-            // Update view to show the full range
-            var xAxis = SelectedChart.Model.Axes.FirstOrDefault(a => a.Key == "X");
-            if (xAxis != null)
-            {
-                double min = DateTimeAxis.ToDouble(FilterStartTime);
-                double max = DateTimeAxis.ToDouble(FilterEndTime);
-                xAxis.Zoom(min, max);
-                AutoZoomYAxis(SelectedChart, min, max);
-            }
-
-            SelectedChart.Model.InvalidatePlot(true);
-            UpdateChartTitle(SelectedChart);
-        }
-
-        public void RemoveSignalFromChart(string fullPath)
-        {
-            if (SelectedChart == null) return;
-            var parts = fullPath.Split('.');
-            string title = parts.Length >= 2 ? $"{parts[parts.Length - 2]}.{parts.Last()}" : parts.Last();
-
-            var series = SelectedChart.Model.Series.FirstOrDefault(s => s.Title == title);
-            if (series != null)
-            {
-                SelectedChart.Model.Series.Remove(series);
-                SelectedChart.Model.InvalidatePlot(true);
-                UpdateChartTitle(SelectedChart);
+                var ax = chart.Model.Axes.FirstOrDefault(a => a.Key == "X");
+                if (ax != null) ax.Zoom(min, max);
+                AutoZoomYAxis(chart, min, max);
+                UpdateStateLabelsVisibility(chart.Model);
+                chart.Model.InvalidatePlot(true);
             }
         }
 
-        private void AddChart()
+        private void AutoZoomYAxis(SingleChartViewModel chart, double minX, double maxX)
         {
-            var vm = new SingleChartViewModel($"Chart {_allActiveCharts.Count + 1}");
-            vm.Model.MouseDown += (s, e) => OnPlotMouseDown(vm, e);
-            vm.Model.MouseMove += (s, e) => OnPlotMouseMove(vm, e);
-            vm.FloatCommand = new RelayCommand(o => FloatChart(vm));
-
-            var xAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "X");
-            if (xAxis != null) xAxis.AxisChanged += (s, e) => { SyncAxes(xAxis); UpdateStateLabelPositions(vm); };
-
-            var yAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "Y");
-            if (yAxis != null) yAxis.AxisChanged += (s, e) => UpdateStateLabelPositions(vm);
-
-            if (_allStates != null) AddStateAnnotations(vm.Model);
-
-            Charts.Add(vm);
-            _allActiveCharts.Add(vm);
-            SelectedChart = vm;
-        }
-
-        private void RemoveChartSafe(SingleChartViewModel vm)
-        {
-            if (Charts.Contains(vm)) Charts.Remove(vm);
-            if (_allActiveCharts.Contains(vm)) _allActiveCharts.Remove(vm);
-        }
-
-        private void FloatChart(SingleChartViewModel oldVm)
-        {
-            var newVm = new SingleChartViewModel(oldVm.Title);
-            foreach (var oldSeries in oldVm.Model.Series.OfType<LineSeries>())
+            var yAxis = chart.Model.Axes.FirstOrDefault(a => a.Key == "Y");
+            if (yAxis == null) return;
+            double yMin = double.MaxValue; double yMax = double.MinValue; bool found = false;
+            foreach (var s in chart.Model.Series.OfType<LineSeries>())
             {
-                var newSeries = new LineSeries { Title = oldSeries.Title, Color = oldSeries.Color, StrokeThickness = oldSeries.StrokeThickness, MarkerType = oldSeries.MarkerType, Decimator = oldSeries.Decimator };
-                newSeries.Points.AddRange(oldSeries.Points);
-                newVm.Model.Series.Add(newSeries);
+                foreach (var p in s.Points)
+                {
+                    if (p.X >= minX && p.X <= maxX) { found = true; if (p.Y < yMin) yMin = p.Y; if (p.Y > yMax) yMax = p.Y; }
+                }
             }
-            if (_allStates != null) AddStateAnnotations(newVm.Model);
-
-            var xAxis = newVm.Model.Axes.FirstOrDefault(a => a.Key == "X");
-            if (xAxis != null) xAxis.AxisChanged += (s, e) => { SyncAxes(xAxis); UpdateStateLabelPositions(newVm); };
-            var yAxis = newVm.Model.Axes.FirstOrDefault(a => a.Key == "Y");
-            if (yAxis != null) yAxis.AxisChanged += (s, e) => UpdateStateLabelPositions(newVm);
-
-            RemoveChartSafe(oldVm);
-            if (Charts.Count == 0) AddChart();
-            _allActiveCharts.Add(newVm);
-
-            Application.Current.Dispatcher.InvokeAsync(() =>
+            if (found && yMin != double.MaxValue)
             {
-                var win = new FloatingChartWindow(newVm, (vmToRemove) => { if (_allActiveCharts.Contains(vmToRemove)) _allActiveCharts.Remove(vmToRemove); });
-                win.Owner = Application.Current.MainWindow;
-                win.Show();
-            }, DispatcherPriority.ApplicationIdle);
+                double pad = (yMax - yMin) * 0.1;
+                if (pad == 0) pad = 1;
+                yAxis.Zoom(yMin - pad, yMax + pad);
+            }
         }
+
+        private void ResetZoom()
+        {
+            if (_logStartTime == DateTime.MinValue) return;
+            SetAbsoluteBounds(_logStartTime, _logEndTime);
+            FilterStartTime = _logStartTime;
+            FilterEndTime = _logEndTime;
+            UpdateGraphsView(_logStartTime, _logEndTime);
+        }
+
+        private void ApplyTimeFilter() => SetTimeRange(FilterStartTime, FilterEndTime);
+
+        private void ClearMeasurement() { /* כפתור מדידה הוסר */ }
 
         private void AddStateAnnotations(PlotModel model)
         {
             if (_allStates == null) return;
+
+            if (!model.Annotations.Any(a => a is LineAnnotation la && la.Y == 0))
+            {
+                model.Annotations.Add(new LineAnnotation
+                {
+                    Type = LineAnnotationType.Horizontal,
+                    Y = 0,
+                    Color = OxyColors.Black,
+                    StrokeThickness = 1.5,
+                    LineStyle = LineStyle.Solid,
+                    Layer = AnnotationLayer.BelowSeries,
+                    Text = "0"
+                });
+            }
+
             foreach (var seg in _allStates)
             {
                 model.Annotations.Add(new RectangleAnnotation
                 {
                     MinimumX = seg.Start,
                     MaximumX = seg.End,
-                    Fill = OxyColor.FromAColor(80, seg.Color),
-                    Layer = AnnotationLayer.BelowSeries,
-                    ToolTip = seg.Name
+                    Fill = OxyColor.FromAColor(40, seg.Color),
+                    Layer = AnnotationLayer.BelowSeries
                 });
 
-                model.Annotations.Add(new TextAnnotation
+                var textAnn = new TextAnnotation
                 {
                     Text = seg.Name,
                     TextPosition = new DataPoint((seg.Start + seg.End) / 2, 0),
-                    TextColor = OxyColors.White,
-                    FontWeight = OxyPlot.FontWeights.Bold,
-                    Background = OxyColor.FromAColor(150, OxyColors.Black),
-                    Stroke = OxyColors.White,
+                    TextColor = OxyColors.Black,
+                    Background = OxyColor.FromAColor(150, OxyColors.White),
+                    Padding = new OxyThickness(3),
+                    Stroke = OxyColors.Gray,
                     StrokeThickness = 1,
-                    Padding = new OxyThickness(4),
+                    Tag = seg,
                     Layer = AnnotationLayer.AboveSeries,
-                    Tag = "StateLabel",
-                    TextVerticalAlignment = OxyPlot.VerticalAlignment.Middle,
-                    TextHorizontalAlignment = OxyPlot.HorizontalAlignment.Center
-                });
+                    TextHorizontalAlignment = OxyPlot.HorizontalAlignment.Center,
+                    TextVerticalAlignment = OxyPlot.VerticalAlignment.Top
+                };
+                model.Annotations.Add(textAnn);
             }
         }
 
-        private void UpdateStateLabelPositions(SingleChartViewModel vm)
+        private void UpdateStateLabelsVisibility(PlotModel model)
         {
-            var yAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "Y");
-            if (yAxis == null) return;
-            double centerY = (yAxis.ActualMaximum + yAxis.ActualMinimum) / 2.0;
-            bool changed = false;
-            foreach (var ann in vm.Model.Annotations.OfType<TextAnnotation>())
+            var xAxis = model.Axes.FirstOrDefault(a => a.Key == "X");
+            var yAxis = model.Axes.FirstOrDefault(a => a.Key == "Y");
+            if (xAxis == null || yAxis == null) return;
+
+            double viewRange = xAxis.ActualMaximum - xAxis.ActualMinimum;
+            double yTop = yAxis.ActualMaximum;
+
+            foreach (var ann in model.Annotations.OfType<TextAnnotation>())
             {
-                if (ann.Tag == "StateLabel") { ann.TextPosition = new DataPoint(ann.TextPosition.X, centerY); changed = true; }
+                if (ann.Tag is MachineStateSegment seg)
+                {
+                    double segDuration = seg.End - seg.Start;
+                    bool isVisible = (segDuration / viewRange) > 0.05;
+
+                    ann.TextColor = isVisible ? OxyColors.Black : OxyColors.Transparent;
+                    ann.Background = isVisible ? OxyColor.FromAColor(150, OxyColors.White) : OxyColors.Transparent;
+                    ann.Stroke = isVisible ? OxyColors.Gray : OxyColors.Transparent;
+
+                    ann.TextPosition = new DataPoint(ann.TextPosition.X, yTop - (yAxis.ActualMaximum - yAxis.ActualMinimum) * 0.05);
+                }
             }
-            if (changed) vm.Model.InvalidatePlot(false);
         }
 
-        private void UpdateChartTitle(SingleChartViewModel vm) { var titles = vm.Model.Series.OfType<Series>().Select(s => s.Title).ToList(); vm.Title = titles.Any() ? string.Join(", ", titles) : $"Chart {Charts.IndexOf(vm) + 1}"; }
-        private OxyColor GetNextColor(int index) { var colors = new[] { OxyColors.Cyan, OxyColors.Orange, OxyColors.Lime, OxyColors.Magenta, OxyColors.Yellow, OxyColors.CornflowerBlue }; return colors[index % colors.Length]; }
+        private void ZoomToState(object param)
+        {
+            if (param is MachineStateSegment s)
+            {
+                SetTimeRange(s.StartTimeValue, s.EndTimeValue);
+            }
+        }
 
+        private void ZoomToAnalysisEvent(object param) { if (param is AnalysisEvent ev) UpdateGraphsView(ev.PeakTime.AddSeconds(-10), ev.PeakTime.AddSeconds(10)); }
+        private void ClearThresholdMarkers(SingleChartViewModel c) { var toRemove = c.Model.Annotations.Where(a => a is PointAnnotation pa && pa.Shape == MarkerType.Diamond).ToList(); foreach (var a in toRemove) c.Model.Annotations.Remove(a); }
+
+        private void StartPlayback()
+        {
+            if ((_logEndTime - FilterEndTime).TotalSeconds < 5)
+            {
+                double currentDuration = (FilterEndTime - FilterStartTime).TotalSeconds;
+                DateTime newStart = _logStartTime;
+                DateTime newEnd = newStart.AddSeconds(currentDuration);
+                SetTimeRange(newStart, newEnd);
+            }
+            IsPlaying = true;
+            _playbackTimer.Start();
+        }
+
+        private void StopPlayback() { IsPlaying = false; _playbackTimer.Stop(); }
         private void ChangeSpeed(bool increase)
         {
             var speeds = new[] { 0.1, 0.25, 0.5, 1.0, 2.0, 5.0, 10.0, 20.0, 50.0 };
             int currentIndex = Array.FindIndex(speeds, s => s >= _playbackSpeed);
             if (currentIndex == -1) currentIndex = 3;
-            if (increase) { if (currentIndex < speeds.Length - 1) PlaybackSpeed = speeds[currentIndex + 1]; }
-            else { if (currentIndex > 0) PlaybackSpeed = speeds[currentIndex - 1]; }
+            if (increase && currentIndex < speeds.Length - 1) _playbackSpeed = speeds[currentIndex + 1];
+            else if (!increase && currentIndex > 0) _playbackSpeed = speeds[currentIndex - 1];
+            OnPropertyChanged(nameof(PlaybackSpeedText));
+        }
+        private void OnPlaybackTick(object sender, EventArgs e)
+        {
+            if (!IsPlaying) return;
+            double stepSeconds = 0.5 * _playbackSpeed;
+            DateTime newStart = FilterStartTime.AddSeconds(stepSeconds);
+            DateTime newEnd = FilterEndTime.AddSeconds(stepSeconds);
+
+            if (newEnd > _logEndTime)
+            {
+                StopPlayback();
+                return;
+            }
+
+            UpdateGraphsView(newStart, newEnd);
         }
 
-        private void OnPlotMouseDown(SingleChartViewModel vm, OxyMouseDownEventArgs e) { bool isCtrl = (Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control; if (!isCtrl) { SelectedChart = vm; return; } if (e.ChangedButton == OxyMouseButton.Left) { if (_hasActiveMeasurement) { ClearMeasurement(vm); _hasActiveMeasurement = false; _measureStart = null; Status = "Measurement cleared."; vm.Model.InvalidatePlot(true); return; } var xAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "X"); var yAxis = vm.Model.Axes.FirstOrDefault(a => a.Key == "Y"); if (xAxis == null || yAxis == null) return; var point = Axis.InverseTransform(e.Position, xAxis, yAxis); if (_measureStart == null) { _measureStart = point; Status = "Point 1 Set."; vm.Model.Annotations.Add(new PointAnnotation { X = point.X, Y = point.Y, Fill = OxyColors.Red, Shape = MarkerType.Circle, Size = 5 }); } else { var p1 = _measureStart.Value; var p2 = point; vm.Model.Annotations.Add(new PointAnnotation { X = p2.X, Y = p2.Y, Fill = OxyColors.Red, Shape = MarkerType.Circle, Size = 5 }); vm.Model.Annotations.Add(new ArrowAnnotation { StartPoint = p1, EndPoint = p2, Color = OxyColors.Blue, LineStyle = LineStyle.Dash, HeadLength = 0 }); double dt = (p2.X - p1.X) * 24 * 3600; double dy = p2.Y - p1.Y; vm.Model.Annotations.Add(new TextAnnotation { TextPosition = new DataPoint((p1.X + p2.X) / 2, (p1.Y + p2.Y) / 2), Text = $"ΔT: {Math.Abs(dt):F3}s\nΔY: {dy:F4}", Background = OxyColor.FromAColor(220, OxyColors.LightYellow), Stroke = OxyColors.Black, StrokeThickness = 1, TextColor = OxyColors.Black, Padding = new OxyThickness(5) }); Status = $"Measured: ΔT={Math.Abs(dt):F3}s, ΔY={dy:F3}"; _measureStart = null; _hasActiveMeasurement = true; } vm.Model.InvalidatePlot(true); e.Handled = true; } }
-        private void ClearMeasurement(SingleChartViewModel vm) { if (vm == null) return; var toRemove = vm.Model.Annotations.Where(a => a is PointAnnotation || a is ArrowAnnotation || (a is TextAnnotation ta && ta.Tag != "StateLabel")).ToList(); foreach (var a in toRemove) vm.Model.Annotations.Remove(a); }
-        private void FilterTree(string text) { if (ComponentTree == null) return; foreach (var node in ComponentTree) FilterNodeRecursive(node, text); }
-        private bool FilterNodeRecursive(GraphNode node, string text) { bool match = string.IsNullOrEmpty(text) || node.Name.IndexOf(text, StringComparison.OrdinalIgnoreCase) >= 0; bool childMatch = false; foreach (var child in node.Children) { if (FilterNodeRecursive(child, text)) childMatch = true; } if (childMatch) { node.IsVisible = true; node.IsExpanded = true; return true; } node.IsVisible = match; if (!match) node.IsExpanded = false; return match; }
-
+        private OxyColor GetNextColor(int i) { var colors = new[] { OxyColors.Blue, OxyColors.Red, OxyColors.Green, OxyColors.OrangeRed, OxyColors.Purple, OxyColors.Teal }; return colors[i % colors.Length]; }
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }

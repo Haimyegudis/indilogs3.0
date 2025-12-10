@@ -9,7 +9,6 @@ namespace IndiLogs_3._0.Views
         public StatesWindow(List<StateEntry> states, object dataContext)
         {
             InitializeComponent();
-            // אנו מקבלים את ה-ViewModel כ-DataContext כדי שה-Command של הדאבל קליק יעבוד
             this.DataContext = dataContext;
             StatesGrid.ItemsSource = states;
         }

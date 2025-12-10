@@ -67,13 +67,17 @@
     <ManifestKeyFile>Indilogs 3.0_TemporaryKey.pfx</ManifestKeyFile>
   </PropertyGroup>
   <PropertyGroup>
-    <GenerateManifests>true</GenerateManifests>
+    <GenerateManifests>false</GenerateManifests>
   </PropertyGroup>
   <PropertyGroup>
     <SignManifests>true</SignManifests>
   </PropertyGroup>
+  <PropertyGroup />
   <PropertyGroup>
-    <NoWin32Manifest>true</NoWin32Manifest>
+    <TargetZone>LocalIntranet</TargetZone>
+  </PropertyGroup>
+  <PropertyGroup>
+    <ApplicationManifest>Properties\app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
     <Reference Include="CsvHelper.Excel, Version=27.2.1.0, Culture=neutral, processorArchitecture=MSIL">
@@ -185,19 +189,19 @@
     <Compile Include="Models\GraphModels.cs" />
     <Compile Include="Models\LoggerNode.cs" />
     <Compile Include="Models\StateEntry.cs" />
-    <Compile Include="Models\Views\ColorPaletteWindow.xaml.cs">
+    <Compile Include="Views\ColorPaletteWindow.xaml.cs">
       <DependentUpon>ColorPaletteWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\FloatingChartWindow.xaml.cs">
+    <Compile Include="Views\FloatingChartWindow.xaml.cs">
       <DependentUpon>FloatingChartWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\GraphsView.xaml.cs">
+    <Compile Include="Views\GraphsView.xaml.cs">
       <DependentUpon>GraphsView.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\MarkedLogsWindow.xaml.cs">
+    <Compile Include="Views\MarkedLogsWindow.xaml.cs">
       <DependentUpon>MarkedLogsWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\StatesWindow.xaml.cs">
+    <Compile Include="Views\StatesWindow.xaml.cs">
       <DependentUpon>StatesWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="ObservableRangeCollection.cs" />
@@ -223,10 +227,10 @@
     <Compile Include="Models\LogSessionData.cs" />
     <Compile Include="Models\LogEntry.cs" />
     <Compile Include="Models\SavedConfiguration.cs" />
-    <Compile Include="Models\Views\ColoringWindow.xaml.cs">
+    <Compile Include="Views\ColoringWindow.xaml.cs">
       <DependentUpon>ColoringWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\FilterWindow.xaml.cs">
+    <Compile Include="Views\FilterWindow.xaml.cs">
       <DependentUpon>FilterWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="SaveConfigWindow.xaml.cs">
@@ -245,10 +249,10 @@
     <Compile Include="SettingsWindow.xaml.cs">
       <DependentUpon>SettingsWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\ThreadFilterWindow.xaml.cs">
+    <Compile Include="Views\ThreadFilterWindow.xaml.cs">
       <DependentUpon>ThreadFilterWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="Models\Views\AnalysisReportWindow.xaml.cs">
+    <Compile Include="Views\AnalysisReportWindow.xaml.cs">
       <DependentUpon>AnalysisReportWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="ViewModels\GraphsViewModel.cs" />
@@ -282,31 +286,31 @@
       <Generator>MSBuild:Compile</Generator>
       <SubType>Designer</SubType>
     </Page>
-    <Page Include="Models\Views\ColoringWindow.xaml">
+    <Page Include="Views\ColoringWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\ColorPaletteWindow.xaml">
+    <Page Include="Views\ColorPaletteWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\FilterWindow.xaml">
+    <Page Include="Views\FilterWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\FloatingChartWindow.xaml">
+    <Page Include="Views\FloatingChartWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\GraphsView.xaml">
+    <Page Include="Views\GraphsView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\MarkedLogsWindow.xaml">
+    <Page Include="Views\MarkedLogsWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\StatesWindow.xaml">
+    <Page Include="Views\StatesWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -318,11 +322,11 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\ThreadFilterWindow.xaml">
+    <Page Include="Views\ThreadFilterWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="Models\Views\AnalysisReportWindow.xaml">
+    <Page Include="Views\AnalysisReportWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -345,8 +349,8 @@
       <Generator>ResXFileCodeGenerator</Generator>
       <LastGenOutput>Resources.Designer.cs</LastGenOutput>
     </EmbeddedResource>
-    <None Include="Indilogs 3.0_TemporaryKey.pfx" />
     <None Include="packages.config" />
+    <None Include="Properties\app.manifest" />
     <None Include="Properties\Settings.settings">
       <Generator>SettingsSingleFileGenerator</Generator>
       <LastGenOutput>Settings.Designer.cs</LastGenOutput>
@@ -374,11 +378,6 @@
       <ProductName>.NET Framework 3.5 SP1</ProductName>
       <Install>false</Install>
     </BootstrapperPackage>
-  </ItemGroup>
-  <ItemGroup>
-    <Content Include="IoRecorderViewer.exe">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-    </Content>
   </ItemGroup>
   <Target Name="RemoveOpenTK" BeforeTargets="CopyFilesToOutputDirectory">
     <ItemGroup>

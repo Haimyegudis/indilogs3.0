@@ -11,22 +11,15 @@ using System.Threading.Tasks;
 
 namespace IndiLogs_3._0.Services
 {
-    // הוסף את המאפיין הזה למחלקה MachineStateSegment בראש הקובץ GraphService.cs
-    public class MachineStateSegment
-    {
-        public string Name { get; set; }
-        public double Start { get; set; } // Double לגרף
-        public double End { get; set; }   // Double לגרף
-        public OxyColor Color { get; set; }
-
-        // --- תוספת: זמן אמיתי לתצוגה ברשימה ---
-        public DateTime StartTimeValue => OxyPlot.Axes.DateTimeAxis.ToDateTime(Start);
-    }
-
     public class GraphService
     {
-        private readonly Regex _ioRegex = new Regex(@"IO_Mon\s*:\s*([^,]+),\s*([^=]+)=([-+]?\d*\.?\d+)", RegexOptions.Compiled | RegexOptions.IgnoreCase);
-        private readonly HashSet<string> _axisParams = new HashSet<string> { "SetP", "ActP", "SetV", "ActV", "Trq", "LagErr" };
+        // Regex קפדני לזיהוי פרמטרים (תומך ברווחים, מינוס, ומספרים מדעיים)
+        private readonly Regex _paramRegex = new Regex(@"([a-zA-Z0-9_]+)\s*=\s*([-+]?\d*\.?\d+(?:[eE][-+]?\d+)?)", RegexOptions.Compiled);
+
+        private readonly HashSet<string> _axisParams = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            "SetP", "ActP", "SetV", "ActV", "Trq", "LagErr", "Vel", "Pos", "Acc", "Current"
+        };
 
         private readonly Dictionary<string, OxyColor> _stateColors = new Dictionary<string, OxyColor>(StringComparer.OrdinalIgnoreCase)
         {
@@ -43,28 +36,47 @@ namespace IndiLogs_3._0.Services
             {
                 var dataStore = new Dictionary<string, List<DataPoint>>();
                 var rootNodes = new ObservableCollection<GraphNode>();
-                var hierarchyHelper = new Dictionary<string, GraphNode>();
                 var stateSegments = new List<MachineStateSegment>();
 
-                void AddToTree(string category, string component, string paramName, string fullKey)
+                // פונקציית עזר לבניית עץ: בודקת אם צומת קיים ומוסיפה אם לא
+                // תומכת בעומק בלתי מוגבל
+                void AddPathToTree(string[] pathParts, string fullKey)
                 {
-                    if (!hierarchyHelper.TryGetValue(category, out var catNode))
+                    ObservableCollection<GraphNode> currentCollection = rootNodes;
+
+                    for (int i = 0; i < pathParts.Length; i++)
                     {
-                        catNode = new GraphNode { Name = category, IsLeaf = false };
-                        hierarchyHelper[category] = catNode;
-                    }
-                    var compNode = catNode.Children.FirstOrDefault(c => c.Name == component);
-                    if (compNode == null)
-                    {
-                        compNode = new GraphNode { Name = component, IsLeaf = false };
-                        catNode.Children.Add(compNode);
-                    }
-                    if (!compNode.Children.Any(c => c.Name == paramName))
-                    {
-                        compNode.Children.Add(new GraphNode { Name = paramName, FullPath = fullKey, IsLeaf = true });
+                        string partName = pathParts[i];
+                        bool isLeaf = (i == pathParts.Length - 1);
+
+                        // חיפוש ברמה הנוכחית
+                        var node = currentCollection.FirstOrDefault(n => n.Name == partName);
+
+                        if (node == null)
+                        {
+                            node = new GraphNode
+                            {
+                                Name = partName,
+                                IsLeaf = isLeaf,
+                                FullPath = isLeaf ? fullKey : null,
+                                IsExpanded = i == 0 // פותח רק את הרמה הראשונה (IO Monitor / Motor Axis)
+                            };
+
+                            // הכנסה ממויינת לפי א-ב
+                            int insertIndex = 0;
+                            while (insertIndex < currentCollection.Count && string.Compare(currentCollection[insertIndex].Name, partName) < 0)
+                            {
+                                insertIndex++;
+                            }
+                            currentCollection.Insert(insertIndex, node);
+                        }
+
+                        // צלילה לרמה הבאה
+                        currentCollection = node.Children;
                     }
                 }
 
+                // מיון לפי זמן כדי שהגרף ייבנה נכון
                 var sortedLogs = logs.Where(l => !string.IsNullOrEmpty(l.Message)).OrderBy(l => l.Date).ToList();
                 if (sortedLogs.Count == 0) return (dataStore, rootNodes, stateSegments);
 
@@ -74,50 +86,94 @@ namespace IndiLogs_3._0.Services
                 foreach (var log in sortedLogs)
                 {
                     string msg = log.Message;
+                    string thread = log.ThreadName ?? "Unknown";
                     double timeVal = DateTimeAxis.ToDouble(log.Date);
 
-                    // --- תיקון: שימוש ב-IndexOf במקום Contains עבור .NET 4.8 ---
+                    // =================================================================================
+                    // 1. Motor Axis Logic
+                    // הפורמט: AxisMon: [Component], [SubComponent], [Key=Val], [Key=Val]...
+                    // העץ הרצוי: Motor Axis -> Thread -> Component -> SubComponent -> Param
+                    // =================================================================================
+                    if (msg.StartsWith("AxisMon:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string content = msg.Substring(8).Trim(); // דילוג על "AxisMon:"
+                        var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
 
-                    // 1. IO_Mon
-                    if (msg.IndexOf("IO_Mon:", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        var match = _ioRegex.Match(msg);
-                        if (match.Success)
+                        // חייבים לפחות 3 חלקים: Comp, SubComp, Params...
+                        if (parts.Length >= 3)
                         {
-                            if (double.TryParse(match.Groups[3].Value, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                            string component = parts[0].Trim();      // חלק 1: Component (לדוגמה BID_Eng_1_Stn_3)
+                            string subComponent = parts[1].Trim();   // חלק 2: SubComponent (לדוגמה BID_EngageRear)
+
+                            // מחברים מחדש את שאר החלקים ומריצים Regex
+                            // זה מבטיח שלא נתבלבל אם יש רווחים מוזרים
+                            string paramsPart = string.Join(",", parts.Skip(2));
+                            var matches = _paramRegex.Matches(paramsPart);
+
+                            foreach (Match m in matches)
                             {
-                                string key = $"IO_Mon.{match.Groups[1].Value.Trim()}.{match.Groups[2].Value.Trim()}";
-                                AddPoint(dataStore, key, timeVal, val);
-                                AddToTree("IO_Mon", match.Groups[1].Value.Trim(), match.Groups[2].Value.Trim(), key);
-                            }
-                        }
-                    }
-                    // 2. AxisMon
-                    else if (msg.IndexOf("AxisMon:", StringComparison.OrdinalIgnoreCase) >= 0)
-                    {
-                        var parts = msg.Split(',');
-                        if (parts.Length > 2)
-                        {
-                            string prefixPart = parts[0];
-                            string subsys = prefixPart.IndexOf(':') > 0 ? prefixPart.Split(':')[1].Trim() : prefixPart.Trim();
-                            string motor = parts[1].Trim();
-                            for (int i = 2; i < parts.Length; i++)
-                            {
-                                var pair = parts[i].Split('=');
-                                if (pair.Length == 2 && _axisParams.Contains(pair[0].Trim()))
+                                string key = m.Groups[1].Value;
+                                string valStr = m.Groups[2].Value;
+
+                                if (_axisParams.Contains(key))
                                 {
-                                    if (double.TryParse(pair[1].Trim().Split(' ')[0], NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                                    if (double.TryParse(valStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
                                     {
-                                        string key = $"AxisMon.{motor}.{pair[0].Trim()}";
-                                        AddPoint(dataStore, key, timeVal, val);
-                                        AddToTree("AxisMon", motor, pair[0].Trim(), key);
+                                        string fullKey = $"{thread}.{component}.{subComponent}.{key}";
+                                        AddPoint(dataStore, fullKey, timeVal, val);
+
+                                        // בניית העץ
+                                        AddPathToTree(new[] { "Motor Axis", thread, component, subComponent, key }, fullKey);
                                     }
                                 }
                             }
                         }
                     }
-                    // 3. State Parsing
-                    else if (log.ThreadName == "Manager" && msg.IndexOf("->") >= 0 && msg.StartsWith("PlcMngr:", StringComparison.OrdinalIgnoreCase))
+                    // =================================================================================
+                    // 2. IO Monitor Logic
+                    // הפורמט: IO_Mon: [Component], [SubComponent=Val], [SubComponent=Val]...
+                    // העץ הרצוי: IO Monitor -> Thread -> Component -> SubComponent
+                    // =================================================================================
+                    else if (msg.StartsWith("IO_Mon:", StringComparison.OrdinalIgnoreCase))
+                    {
+                        string content = msg.Substring(7).Trim(); // דילוג על "IO_Mon:"
+                        var parts = content.Split(new[] { ',' }, StringSplitOptions.RemoveEmptyEntries);
+
+                        if (parts.Length >= 2)
+                        {
+                            // חלק 1: שם הקומפוננטה הראשית (למשל CS_Stn_6)
+                            string componentName = parts[0].Trim();
+
+                            // רצים על שאר החלקים שהם זוגות (SubComponent=Value)
+                            for (int i = 1; i < parts.Length; i++)
+                            {
+                                string pair = parts[i].Trim();
+                                int eqIdx = pair.LastIndexOf('='); // שימוש ב-LastIndexOf למקרה שיש = בשם (נדיר)
+
+                                if (eqIdx > 0)
+                                {
+                                    string subComponentName = pair.Substring(0, eqIdx).Trim();
+                                    string valStr = pair.Substring(eqIdx + 1).Trim();
+
+                                    // ניקוי הערך (למשל הסרת "(IntrSim)")
+                                    if (valStr.Contains(" ")) valStr = valStr.Split(' ')[0];
+
+                                    if (double.TryParse(valStr, NumberStyles.Any, CultureInfo.InvariantCulture, out double val))
+                                    {
+                                        string fullKey = $"IO.{thread}.{componentName}.{subComponentName}";
+                                        AddPoint(dataStore, fullKey, timeVal, val);
+
+                                        // בניית העץ
+                                        AddPathToTree(new[] { "IO Monitor", thread, componentName, subComponentName }, fullKey);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    // =================================================================================
+                    // 3. Machine States Logic
+                    // =================================================================================
+                    else if (log.ThreadName == "Manager" && msg.StartsWith("PlcMngr:", StringComparison.OrdinalIgnoreCase) && msg.Contains("->"))
                     {
                         var parts = msg.Split(new[] { "->" }, StringSplitOptions.None);
                         if (parts.Length > 1)
@@ -132,8 +188,6 @@ namespace IndiLogs_3._0.Services
                 if (lastStateLog != null && sortedLogs.Count > 0)
                     AddStateSegment(stateSegments, currentStateName, lastStateLog.Date, sortedLogs.Last().Date);
 
-                foreach (var kvp in hierarchyHelper.OrderBy(k => k.Key)) rootNodes.Add(kvp.Value);
-
                 return (dataStore, rootNodes, stateSegments);
             });
         }
@@ -141,14 +195,20 @@ namespace IndiLogs_3._0.Services
         private void AddStateSegment(List<MachineStateSegment> list, string name, DateTime start, DateTime end)
         {
             var color = _stateColors.ContainsKey(name) ? _stateColors[name] : OxyColors.LightGray;
-            color = OxyColor.FromAColor(60, color);
-            list.Add(new MachineStateSegment { Name = name, Start = DateTimeAxis.ToDouble(start), End = DateTimeAxis.ToDouble(end), Color = color });
+            if ((end - start).TotalMilliseconds > 10)
+            {
+                list.Add(new MachineStateSegment { Name = name, Start = DateTimeAxis.ToDouble(start), End = DateTimeAxis.ToDouble(end), Color = color });
+            }
         }
 
         private void AddPoint(Dictionary<string, List<DataPoint>> store, string key, double x, double y)
         {
-            if (!store.ContainsKey(key)) store[key] = new List<DataPoint>();
-            store[key].Add(new DataPoint(x, y));
+            if (!store.TryGetValue(key, out var list))
+            {
+                list = new List<DataPoint>();
+                store[key] = list;
+            }
+            list.Add(new DataPoint(x, y));
         }
     }
 }

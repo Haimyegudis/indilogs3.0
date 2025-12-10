@@ -12,7 +12,6 @@ namespace IndiLogs_3._0.Converters
         {
             if (value is OxyColor oxyColor)
             {
-                // המרת צבע OxyPlot לצבע WPF
                 return new SolidColorBrush(Color.FromArgb(oxyColor.A, oxyColor.R, oxyColor.G, oxyColor.B));
             }
             return Brushes.Transparent;
