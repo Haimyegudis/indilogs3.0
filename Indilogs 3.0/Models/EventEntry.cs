@@ -8,6 +8,7 @@ namespace IndiLogs_3._0.Models
         public string Name { get; set; }
         public string State { get; set; }
         public string Severity { get; set; }
-        public string Description { get; set; } // Parameters/Subsystem
+        public string Description { get; set; } // Subsystem
+        public string Parameters { get; set; }  // <-- הוספנו את המאפיין החדש
     }
 }

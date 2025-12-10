@@ -38,6 +38,7 @@ namespace IndiLogs_3._0.ViewModels
         private List<LogEntry> _lastFilteredAppCache;
         private bool _isAppTimeFocusActive;
         public GraphsViewModel GraphsVM { get; set; }
+        public ICommand FilterAppErrorsCommand { get; }
         // --- Services ---
         private readonly LogFileService _logService;
         private readonly LogColoringService _coloringService;
@@ -496,7 +497,7 @@ namespace IndiLogs_3._0.ViewModels
             NextMarkedCommand = new RelayCommand(GoToNextMarked);
             PrevMarkedCommand = new RelayCommand(GoToPrevMarked);
             JumpToLogCommand = new RelayCommand(JumpToLog);
-
+            FilterAppErrorsCommand = new RelayCommand(FilterAppErrors);
             OpenJiraCommand = new RelayCommand(o => OpenUrl("https://hp-jira.external.hp.com/secure/Dashboard.jspa"));
             OpenKibanaCommand = new RelayCommand(OpenKibana);
             OpenOutlookCommand = new RelayCommand(OpenOutlook);
@@ -560,7 +561,33 @@ namespace IndiLogs_3._0.ViewModels
         }
 
         // --- SESSION SWITCHING ---
+        private void FilterAppErrors(object obj)
+        {
+            if (_allAppLogsCache == null || !_allAppLogsCache.Any()) return;
 
+            IsBusy = true;
+            StatusMessage = "Filtering App Errors...";
+
+            Task.Run(() =>
+            {
+                // סינון רק של שורות Error ומיון לפי תאריך יורד (הכי חדש למעלה)
+                var errors = _allAppLogsCache
+                    .Where(l => l.Level != null && l.Level.Equals("Error", StringComparison.OrdinalIgnoreCase))
+                    .OrderByDescending(l => l.Date)
+                    .ToList();
+
+                Application.Current.Dispatcher.Invoke(() =>
+                {
+                    AppDevLogsFiltered.ReplaceAll(errors);
+                    IsBusy = false;
+                    StatusMessage = $"Showing {errors.Count} Errors";
+
+                    // עדכון ה-UI שאנחנו במצב פילטר
+                    _isAppFilterActive = true;
+                    OnPropertyChanged(nameof(IsFilterActive));
+                });
+            });
+        }
         private int _selectedTabIndex;
         public int SelectedTabIndex
         {

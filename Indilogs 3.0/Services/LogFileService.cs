@@ -314,6 +314,8 @@ namespace IndiLogs_3._0.Services
             return list;
         }
 
+        // חפש את הפונקציה ParseEventsCsv והחלף אותה (או את הלולאה הפנימית) בקוד הבא:
+
         private List<EventEntry> ParseEventsCsv(Stream stream)
         {
             var list = new List<EventEntry>();
@@ -325,17 +327,21 @@ namespace IndiLogs_3._0.Services
                     string header = reader.ReadLine();
                     if (header == null) return list;
                     var headers = header.Split(',');
+
+                    // מיפוי עמודות
                     int timeIdx = Array.IndexOf(headers, "Time");
                     int nameIdx = Array.IndexOf(headers, "Name");
                     int stateIdx = Array.IndexOf(headers, "State");
                     int severityIdx = Array.IndexOf(headers, "Severity");
                     int subsystemIdx = Array.IndexOf(headers, "Subsystem");
+                    int paramsIdx = Array.IndexOf(headers, "Parameters"); // <-- זיהוי העמודה החדשה
 
                     while (!reader.EndOfStream)
                     {
                         var line = reader.ReadLine();
                         if (string.IsNullOrWhiteSpace(line)) continue;
                         var parts = SplitCsvLine(line);
+
                         if (parts.Count > timeIdx && timeIdx >= 0)
                         {
                             string timeStr = parts[timeIdx].Trim('"');
@@ -347,7 +353,9 @@ namespace IndiLogs_3._0.Services
                                     Name = (nameIdx >= 0 && parts.Count > nameIdx) ? parts[nameIdx] : "",
                                     State = (stateIdx >= 0 && parts.Count > stateIdx) ? parts[stateIdx] : "",
                                     Severity = (severityIdx >= 0 && parts.Count > severityIdx) ? parts[severityIdx] : "",
-                                    Description = (subsystemIdx >= 0 && parts.Count > subsystemIdx) ? parts[subsystemIdx] : ""
+                                    Description = (subsystemIdx >= 0 && parts.Count > subsystemIdx) ? parts[subsystemIdx] : "",
+                                    // קריאת הפרמטרים
+                                    Parameters = (paramsIdx >= 0 && parts.Count > paramsIdx) ? parts[paramsIdx] : ""
                                 };
                                 if (!string.IsNullOrWhiteSpace(entry.Name)) list.Add(entry);
                             }

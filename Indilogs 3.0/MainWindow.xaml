@@ -24,6 +24,9 @@
                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="3">
                     <Setter Property="Visibility" Value="Collapsed"/>
                 </DataTrigger>
+                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="4">
+                    <Setter Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
             </Style.Triggers>
         </Style>
     </Window.Resources>
@@ -251,10 +254,10 @@
                                         <Setter Property="ContextMenu">
                                             <Setter.Value>
                                                 <ContextMenu>
-                                                    <MenuItem Header="🎯 Show Only This" Command="{Binding PlacementTarget.Tag.TreeShowOnlyCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="🎯 Show Only This" Command="{Binding PlacementTarget.Tag.TreeShowOnlyThisCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                                     <MenuItem Header="📂 Show With Children" Command="{Binding PlacementTarget.Tag.TreeShowWithChildrenCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                                     <Separator/>
-                                                    <MenuItem Header="🚫 Hide This Logger" Command="{Binding PlacementTarget.Tag.TreeHideCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                                    <MenuItem Header="🚫 Hide This Logger" Command="{Binding PlacementTarget.Tag.TreeHideThisCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                                     <MenuItem Header="🚫 Hide With Children" Command="{Binding PlacementTarget.Tag.TreeHideWithChildrenCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                                     <Separator/>
                                                     <MenuItem Header="✅ Show All" Command="{Binding PlacementTarget.Tag.TreeShowAllCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"/>
@@ -316,7 +319,7 @@
                 </Border>
 
                 <TabControl x:Name="MainTabs" Grid.Row="0" SelectedIndex="{Binding SelectedTabIndex}" BorderThickness="0" Background="Transparent" Margin="0,5,0,0">
-                    <TabItem Header="Logs">
+                    <TabItem Header="PLC">
                         <DataGrid x:Name="MainLogsGrid" ItemsSource="{Binding Logs}" SelectedItem="{Binding SelectedLog}" 
                                   FontSize="{Binding GridFontSize}" 
                                   FontFamily="{DynamicResource ContentFontFamily}"
@@ -369,7 +372,7 @@
                         </DataGrid>
                     </TabItem>
 
-                    <TabItem Header="Logs (Filtered)">
+                    <TabItem Header="PLC (Filtered)">
                         <DataGrid ItemsSource="{Binding FilteredLogs}" SelectedItem="{Binding SelectedLog}" 
                                   FontSize="{Binding GridFontSize}" 
                                   FontFamily="{DynamicResource ContentFontFamily}"
@@ -401,49 +404,70 @@
                     </TabItem>
 
                     <TabItem Header="APP">
-                        <DataGrid x:Name="AppLogsGrid" 
-                                  ItemsSource="{Binding AppDevLogsFiltered}" 
-                                  SelectedItem="{Binding SelectedLog}"
-                                  Sorting="AppLogsGrid_Sorting"
-                                  FontSize="{Binding GridFontSize}" 
-                                  FontFamily="{DynamicResource ContentFontFamily}"
-                                  FontWeight="{DynamicResource ContentFontWeight}"
-                                  AutoGenerateColumns="False" IsReadOnly="True" 
-                                  RowStyle="{DynamicResource LogRowStyle}" 
-                                  SelectionMode="Extended" SelectionUnit="FullRow">
+                        <Grid>
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
 
-                            <DataGrid.InputBindings>
-                                <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
-                                <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ViewLogDetailsCommand}" CommandParameter="{Binding SelectedLog}" />
-                            </DataGrid.InputBindings>
+                            <Border Grid.Row="0" Background="{DynamicResource BgCard}" Padding="5">
+                                <StackPanel Orientation="Horizontal">
+                                    <Button Command="{Binding FilterAppErrorsCommand}" 
+                                            Style="{DynamicResource ModernBtn}" 
+                                            Background="#EF4444" Foreground="White" 
+                                            Padding="8,4" Margin="5" ToolTip="Show Errors Only (Newest First)">
+                                        <StackPanel Orientation="Horizontal">
+                                            <TextBlock Text="⚠" Margin="0,0,5,0"/>
+                                            <TextBlock Text="ERRORS" FontWeight="Bold"/>
+                                        </StackPanel>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
 
-                            <DataGrid.ContextMenu>
-                                <ContextMenu>
-                                    <MenuItem Command="{Binding PlacementTarget.DataContext.FilterContextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" Header="Time Focus Filter"/>
-                                    <Separator/>
-                                    <MenuItem Header="Filter Out (Message)..." Command="{Binding FilterOutCommand}"/>
-                                </ContextMenu>
-                            </DataGrid.ContextMenu>
+                            <DataGrid Grid.Row="1" x:Name="AppLogsGrid" 
+                                      ItemsSource="{Binding AppDevLogsFiltered}" 
+                                      SelectedItem="{Binding SelectedLog}"
+                                      Sorting="AppLogsGrid_Sorting"
+                                      FontSize="{Binding GridFontSize}" 
+                                      FontFamily="{DynamicResource ContentFontFamily}"
+                                      FontWeight="{DynamicResource ContentFontWeight}"
+                                      AutoGenerateColumns="False" IsReadOnly="True" 
+                                      RowStyle="{DynamicResource LogRowStyle}" 
+                                      SelectionMode="Extended" SelectionUnit="FullRow">
 
-                            <DataGrid.Columns>
-                                <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="50" FontWeight="Bold" CanUserSort="True" SortMemberPath="Level"/>
-                                <DataGridTextColumn Header="Time" Binding="{Binding Date, StringFormat='yyyy-MM-dd HH:mm:ss.fff'}" Width="160" CanUserSort="True" SortMemberPath="Time"/>
-                                <DataGridTextColumn Header="Logger" Binding="{Binding Logger}" Width="250" CanUserSort="True" SortMemberPath="Logger"/>
-                                <DataGridTextColumn Header="Thread" Binding="{Binding ThreadName}" Width="80" CanUserSort="True" SortMemberPath="Thread"/>
+                                <DataGrid.InputBindings>
+                                    <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
+                                    <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ViewLogDetailsCommand}" CommandParameter="{Binding SelectedLog}" />
+                                </DataGrid.InputBindings>
 
-                                <DataGridTemplateColumn Header="Message" Width="*">
-                                    <DataGridTemplateColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <controls:HighlightTextBlock 
-                                                Text="{Binding Message}" 
-                                                HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
-                                                TextTrimming="CharacterEllipsis" 
-                                                VerticalAlignment="Center"/>
-                                        </DataTemplate>
-                                    </DataGridTemplateColumn.CellTemplate>
-                                </DataGridTemplateColumn>
-                            </DataGrid.Columns>
-                        </DataGrid>
+                                <DataGrid.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem Command="{Binding PlacementTarget.DataContext.FilterContextCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" Header="Time Focus Filter"/>
+                                        <Separator/>
+                                        <MenuItem Header="Filter Out (Message)..." Command="{Binding FilterOutCommand}"/>
+                                    </ContextMenu>
+                                </DataGrid.ContextMenu>
+
+                                <DataGrid.Columns>
+                                    <DataGridTextColumn Header="Lvl" Binding="{Binding Level}" Width="50" FontWeight="Bold" CanUserSort="True" SortMemberPath="Level"/>
+                                    <DataGridTextColumn Header="Time" Binding="{Binding Date, StringFormat='yyyy-MM-dd HH:mm:ss.fff'}" Width="160" CanUserSort="True" SortMemberPath="Time"/>
+                                    <DataGridTextColumn Header="Logger" Binding="{Binding Logger}" Width="250" CanUserSort="True" SortMemberPath="Logger"/>
+                                    <DataGridTextColumn Header="Thread" Binding="{Binding ThreadName}" Width="80" CanUserSort="True" SortMemberPath="Thread"/>
+
+                                    <DataGridTemplateColumn Header="Message" Width="*">
+                                        <DataGridTemplateColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <controls:HighlightTextBlock 
+                                                    Text="{Binding Message}" 
+                                                    HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                    TextTrimming="CharacterEllipsis" 
+                                                    VerticalAlignment="Center"/>
+                                            </DataTemplate>
+                                        </DataGridTemplateColumn.CellTemplate>
+                                    </DataGridTemplateColumn>
+                                </DataGrid.Columns>
+                            </DataGrid>
+                        </Grid>
                     </TabItem>
 
                     <TabItem Header="Graphs">
@@ -465,6 +489,16 @@
                                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200"/>
                                 <DataGridTextColumn Header="State" Binding="{Binding State}" Width="120"/>
                                 <DataGridTextColumn Header="Severity" Binding="{Binding Severity}" Width="80"/>
+
+                                <DataGridTextColumn Header="Parameters" Binding="{Binding Parameters}" Width="200">
+                                    <DataGridTextColumn.ElementStyle>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
+                                            <Setter Property="ToolTip" Value="{Binding Parameters}"/>
+                                        </Style>
+                                    </DataGridTextColumn.ElementStyle>
+                                </DataGridTextColumn>
+
                                 <DataGridTextColumn Header="Info" Binding="{Binding Description}" Width="*"/>
                             </DataGrid.Columns>
                         </DataGrid>
@@ -516,6 +550,9 @@
                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="3">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="4">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
                             </Style.Triggers>
                         </Style>
                     </GridSplitter.Style>
@@ -526,6 +563,9 @@
                         <Style TargetType="Border">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="3">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="4">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
@@ -588,6 +628,9 @@
                         <Style TargetType="Border">
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="3">
+                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="4">
                                     <Setter Property="Visibility" Value="Collapsed"/>
                                 </DataTrigger>
                             </Style.Triggers>
