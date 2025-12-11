@@ -1666,26 +1666,52 @@ namespace IndiLogs_3._0.ViewModels
             var dict = Application.Current.Resources;
             if (isDark)
             {
-                UpdateResource(dict, "BgDark", new SolidColorBrush(Color.FromRgb(30, 30, 30)));
-                UpdateResource(dict, "BgPanel", new SolidColorBrush(Color.FromRgb(37, 37, 38)));
-                UpdateResource(dict, "BgCard", new SolidColorBrush(Color.FromRgb(45, 45, 48)));
+                // --- DARK MODE (Restored Original Dark) ---
+                UpdateResource(dict, "BgDark", new SolidColorBrush(Color.FromRgb(18, 18, 18))); // #121212
+                UpdateResource(dict, "BgPanel", new SolidColorBrush(Color.FromRgb(30, 30, 36))); // #1E1E24
+                UpdateResource(dict, "BgCard", new SolidColorBrush(Color.FromRgb(37, 37, 45))); // #25252D
+                UpdateResource(dict, "BgCardHover", new SolidColorBrush(Color.FromRgb(45, 45, 54)));
+
                 UpdateResource(dict, "TextPrimary", new SolidColorBrush(Colors.White));
-                UpdateResource(dict, "TextSecondary", new SolidColorBrush(Color.FromRgb(160, 160, 160)));
-                UpdateResource(dict, "BorderColor", new SolidColorBrush(Color.FromRgb(63, 63, 70)));
+                UpdateResource(dict, "TextSecondary", new SolidColorBrush(Color.FromRgb(176, 176, 176)));
+                UpdateResource(dict, "BorderColor", new SolidColorBrush(Color.FromRgb(51, 51, 51)));
+
+                // Neon Colors for Dark
+                UpdateResource(dict, "AnimColor1", new SolidColorBrush(Color.FromRgb(0, 229, 255))); // Cyan
+                UpdateResource(dict, "AnimColor2", new SolidColorBrush(Color.FromRgb(245, 0, 87))); // Pink
+                UpdateResource(dict, "AnimText", new SolidColorBrush(Colors.White));
             }
             else
             {
-                UpdateResource(dict, "BgDark", new SolidColorBrush(Color.FromRgb(243, 243, 243)));
-                UpdateResource(dict, "BgPanel", new SolidColorBrush(Colors.White));
-                UpdateResource(dict, "BgCard", new SolidColorBrush(Color.FromRgb(250, 250, 250)));
-                UpdateResource(dict, "TextPrimary", new SolidColorBrush(Color.FromRgb(30, 30, 30)));
-                UpdateResource(dict, "TextSecondary", new SolidColorBrush(Color.FromRgb(100, 100, 100)));
-                UpdateResource(dict, "BorderColor", new SolidColorBrush(Color.FromRgb(220, 220, 220)));
+                // --- BRIGHT MODE (Real Linear Gradient Gray) ---
+                var lightGradient = new LinearGradientBrush();
+                lightGradient.StartPoint = new Point(0, 0);
+                lightGradient.EndPoint = new Point(1, 1);
+                lightGradient.GradientStops.Add(new GradientStop(Color.FromRgb(240, 242, 245), 0.0)); // Light Gray
+                lightGradient.GradientStops.Add(new GradientStop(Color.FromRgb(200, 204, 210), 1.0)); // Darker Gray
+
+                UpdateResource(dict, "BgDark", lightGradient);
+                UpdateResource(dict, "BgPanel", new SolidColorBrush(Color.FromRgb(243, 244, 246))); // Sidebar Light
+                UpdateResource(dict, "BgCard", new SolidColorBrush(Colors.White));
+                UpdateResource(dict, "BgCardHover", new SolidColorBrush(Color.FromRgb(230, 230, 230)));
+
+                UpdateResource(dict, "TextPrimary", new SolidColorBrush(Color.FromRgb(31, 41, 55))); // Dark Text
+                UpdateResource(dict, "TextSecondary", new SolidColorBrush(Color.FromRgb(107, 114, 128)));
+                UpdateResource(dict, "BorderColor", new SolidColorBrush(Color.FromRgb(209, 213, 219)));
+
+                // Intense Neon for Bright Mode
+                UpdateResource(dict, "AnimColor1", new SolidColorBrush(Color.FromRgb(0, 120, 215))); // Deep Blue
+                UpdateResource(dict, "AnimColor2", new SolidColorBrush(Color.FromRgb(220, 0, 80))); // Deep Pink
+                UpdateResource(dict, "AnimText", new SolidColorBrush(Colors.Black));
             }
         }
 
-        private void UpdateResource(ResourceDictionary dict, string key, object value) { if (dict.Contains(key)) dict.Remove(key); dict.Add(key, value); }
-
+        private void UpdateResource(ResourceDictionary dict, string key, object value)
+        {
+            if (dict.Contains(key))
+                dict.Remove(key);
+            dict.Add(key, value);
+        }
         private async void OpenColoringWindow(object obj)
         {
             try

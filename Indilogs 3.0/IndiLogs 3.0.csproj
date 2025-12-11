@@ -208,17 +208,17 @@
     <Compile Include="Services\AnalysisModels.cs" />
     <Compile Include="Services\CsvExportService.cs" />
     <Compile Include="Services\DebugHelper.cs" />
-    <Compile Include="FilterOutWindow.xaml.cs">
+    <Compile Include="Views\FilterOutWindow.xaml.cs">
       <DependentUpon>FilterOutWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="FontsWindow.xaml.cs">
+    <Compile Include="Views\FontsWindow.xaml.cs">
       <DependentUpon>FontsWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="HelpWindow.xaml.cs">
+    <Compile Include="Views\HelpWindow.xaml.cs">
       <DependentUpon>HelpWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="HighlightTextBlock.cs" />
-    <Compile Include="LogDetailsWindow.xaml.cs">
+    <Compile Include="Views\LogDetailsWindow.xaml.cs">
       <DependentUpon>LogDetailsWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Models\ConditionModels.cs" />
@@ -233,7 +233,7 @@
     <Compile Include="Views\FilterWindow.xaml.cs">
       <DependentUpon>FilterWindow.xaml</DependentUpon>
     </Compile>
-    <Compile Include="SaveConfigWindow.xaml.cs">
+    <Compile Include="Views\SaveConfigWindow.xaml.cs">
       <DependentUpon>SaveConfigWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Services\GetReadyAnalyzer.cs" />
@@ -246,7 +246,7 @@
     <Compile Include="Services\SearchIndexService.cs" />
     <Compile Include="Services\UpdateLogger.cs" />
     <Compile Include="Services\UpdateService.cs" />
-    <Compile Include="SettingsWindow.xaml.cs">
+    <Compile Include="Views\SettingsWindow.xaml.cs">
       <DependentUpon>SettingsWindow.xaml</DependentUpon>
     </Compile>
     <Compile Include="Views\ThreadFilterWindow.xaml.cs">
@@ -266,19 +266,19 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
-    <Page Include="FilterOutWindow.xaml">
+    <Page Include="Views\FilterOutWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="FontsWindow.xaml">
+    <Page Include="Views\FontsWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="HelpWindow.xaml">
+    <Page Include="Views\HelpWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="LogDetailsWindow.xaml">
+    <Page Include="Views\LogDetailsWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
@@ -314,11 +314,11 @@
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="SaveConfigWindow.xaml">
+    <Page Include="Views\SaveConfigWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
-    <Page Include="SettingsWindow.xaml">
+    <Page Include="Views\SettingsWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

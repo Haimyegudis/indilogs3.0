@@ -61,8 +61,8 @@
         </ListBox>
 
         <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Right">
-            <Button Content="✔ OK" Click="OK_Click" Style="{DynamicResource ModernBtn}" Background="#10B981" Foreground="White" Width="80" IsDefault="True"/>
-            <Button Content="✖ Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Background="#6C757D" Foreground="White" Width="80" IsCancel="True"/>
+            <Button Content="✔ OK" Click="OK_Click" Style="{DynamicResource ModernBtn}" Background="#10B981" Foreground="White" Width="83" IsDefault="True"/>
+            <Button Content="✖ Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Background="#6C757D" Foreground="White" Width="84" IsCancel="True"/>
         </StackPanel>
     </Grid>
 </Window>
