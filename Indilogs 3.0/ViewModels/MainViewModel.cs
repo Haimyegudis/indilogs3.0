@@ -1,4 +1,8 @@
-﻿using IndiLogs_3._0.Models;
+﻿// BILINGUAL-HEADER-START
+// EN: File: MainViewModel.cs - Auto-added bilingual header.
+// HE: קובץ: MainViewModel.cs - כותרת דו-לשונית שנוספה אוטומטית.
+
+using IndiLogs_3._0.Models;
 using IndiLogs_3._0.Models.Analysis;
 using IndiLogs_3._0.Services;
 using IndiLogs_3._0.Services.Analysis;
@@ -177,7 +181,7 @@ namespace IndiLogs_3._0.ViewModels
             public event PropertyChangedEventHandler PropertyChanged;
             protected void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
         }
-      
+
 
         // משתנה לחלון המאוחד
         private MarkedLogsWindow _combinedMarkedWindow;
@@ -402,6 +406,22 @@ namespace IndiLogs_3._0.ViewModels
             set { _selectedTimeUnit = value; OnPropertyChanged(); }
         }
 
+        // --- Explorer Menu State (Left) ---
+        private bool _isExplorerMenuOpen;
+        public bool IsExplorerMenuOpen
+        {
+            get => _isExplorerMenuOpen;
+            set { _isExplorerMenuOpen = value; OnPropertyChanged(); }
+        }
+
+        // --- Config Menu State (Right) ---
+        private bool _isConfigMenuOpen;
+        public bool IsConfigMenuOpen
+        {
+            get => _isConfigMenuOpen;
+            set { _isConfigMenuOpen = value; OnPropertyChanged(); }
+        }
+
         // --- Commands ---
         public ICommand LoadCommand { get; }
         public ICommand ClearCommand { get; }
@@ -443,6 +463,10 @@ namespace IndiLogs_3._0.ViewModels
         public ICommand LivePlayCommand { get; }
         public ICommand LivePauseCommand { get; }
         public ICommand LiveClearCommand { get; }
+
+        // Menu Toggles
+        public ICommand ToggleExplorerMenuCommand { get; }
+        public ICommand ToggleConfigMenuCommand { get; }
 
         // Tree Commands (NEW)
         public ICommand TreeShowThisCommand { get; }            // 1
@@ -490,9 +514,13 @@ namespace IndiLogs_3._0.ViewModels
             _searchDebounceTimer.Interval = TimeSpan.FromMilliseconds(500);
             _searchDebounceTimer.Tick += OnSearchTimerTick;
 
-            // Command Initialization
+            // --- Menu Toggles ---
+            ToggleExplorerMenuCommand = new RelayCommand(o => IsExplorerMenuOpen = !IsExplorerMenuOpen);
+            ToggleConfigMenuCommand = new RelayCommand(o => IsConfigMenuOpen = !IsConfigMenuOpen);
+
+            // Command Initialization - Updated to auto-close menus
             LoadCommand = new RelayCommand(LoadFile);
-            ClearCommand = new RelayCommand(ClearLogs);
+            ClearCommand = new RelayCommand(o => { ClearLogs(o); IsExplorerMenuOpen = false; });
             MarkRowCommand = new RelayCommand(MarkRow);
             NextMarkedCommand = new RelayCommand(GoToNextMarked);
             PrevMarkedCommand = new RelayCommand(GoToPrevMarked);
@@ -502,16 +530,22 @@ namespace IndiLogs_3._0.ViewModels
             OpenKibanaCommand = new RelayCommand(OpenKibana);
             OpenOutlookCommand = new RelayCommand(OpenOutlook);
             OpenGraphViewerCommand = new RelayCommand(OpenGraphViewer);
-            OpenStatesWindowCommand = new RelayCommand(OpenStatesWindow);
+
+            OpenMarkedLogsWindowCommand = new RelayCommand(o => { OpenMarkedLogsWindow(o); IsExplorerMenuOpen = false; });
+            OpenStatesWindowCommand = new RelayCommand(o => { OpenStatesWindow(o); IsExplorerMenuOpen = false; });
+            ExportParsedDataCommand = new RelayCommand(o => { ExportParsedData(o); IsExplorerMenuOpen = false; });
+            RunAnalysisCommand = new RelayCommand(o => { RunAnalysis(o); IsExplorerMenuOpen = false; });
 
             ToggleSearchCommand = new RelayCommand(o => { IsSearchPanelVisible = !IsSearchPanelVisible; });
             CloseSearchCommand = new RelayCommand(o => { IsSearchPanelVisible = false; SearchText = ""; });
 
             OpenFilterWindowCommand = new RelayCommand(OpenFilterWindow);
             OpenColoringWindowCommand = new RelayCommand(OpenColoringWindow);
-            SaveConfigCommand = new RelayCommand(SaveConfiguration);
-            LoadConfigCommand = new RelayCommand(LoadConfigurationFromFile);
-            RemoveConfigCommand = new RelayCommand(RemoveConfiguration, o => SelectedConfig != null);
+
+            // Config Commands - Updated to auto-close menu
+            SaveConfigCommand = new RelayCommand(o => { SaveConfiguration(o); IsConfigMenuOpen = false; });
+            LoadConfigCommand = new RelayCommand(o => { LoadConfigurationFromFile(o); IsConfigMenuOpen = false; });
+            RemoveConfigCommand = new RelayCommand(o => { RemoveConfiguration(o); IsConfigMenuOpen = false; }, o => SelectedConfig != null);
             ApplyConfigCommand = new RelayCommand(ApplyConfiguration);
 
             FilterOutCommand = new RelayCommand(FilterOut);
@@ -525,10 +559,7 @@ namespace IndiLogs_3._0.ViewModels
             ToggleBoldCommand = new RelayCommand(o => IsBold = !IsBold);
             OpenSettingsCommand = new RelayCommand(OpenSettingsWindow);
             OpenFontsWindowCommand = new RelayCommand(OpenFontsWindow);
-            OpenMarkedLogsWindowCommand = new RelayCommand(OpenMarkedLogsWindow);
 
-            ExportParsedDataCommand = new RelayCommand(ExportParsedData);
-            RunAnalysisCommand = new RelayCommand(RunAnalysis);
             FilterToStateCommand = new RelayCommand(FilterToState);
 
             ZoomInCommand = new RelayCommand(o =>
@@ -1877,7 +1908,7 @@ namespace IndiLogs_3._0.ViewModels
             if (_combinedMarkedWindow != null) { _combinedMarkedWindow.Close(); _combinedMarkedWindow = null; }
             if (_markedMainLogsWindow != null) { _markedMainLogsWindow.Close(); _markedMainLogsWindow = null; }
             if (_markedAppLogsWindow != null) { _markedAppLogsWindow.Close(); _markedAppLogsWindow = null; }
-        }   
+        }
         private bool IsDefaultLog(LogEntry l)
         {
             if (string.Equals(l.Level, "Error", StringComparison.OrdinalIgnoreCase)) return true;
