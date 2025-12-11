@@ -199,5 +199,15 @@ namespace IndiLogs_3._0
             scrollViewer.Cursor = Cursors.Arrow;
             scrollViewer.PanningMode = PanningMode.Both; // החזרה למצב רגיל
         }
+
+        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+
+        }
+
+        private void GraphsView_Loaded(object sender, RoutedEventArgs e)
+        {
+
+        }
     }
 }
