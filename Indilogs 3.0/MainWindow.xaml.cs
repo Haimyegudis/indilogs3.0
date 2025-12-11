@@ -17,12 +17,15 @@ namespace IndiLogs_3._0
         private Point _lastMousePosition;
         private bool _isDragging;
 
+        // Flag to distinguish between user clicks and code-driven scrolling
+        private bool _isProgrammaticScroll = false;
+
         public MainWindow()
         {
             InitializeComponent();
             this.Loaded += MainWindow_Loaded;
 
-            // בדיקת ארגומנטים (פתיחה דרך "פתח באמצעות")
+            // Check arguments (Open with...)
             string[] args = Environment.GetCommandLineArgs();
             if (args.Length > 1)
             {
@@ -70,10 +73,125 @@ namespace IndiLogs_3._0
             try
             {
                 MainLogsGrid.SelectedItem = log;
+
+                // Allow scrolling only for this specific programmatic action
+                _isProgrammaticScroll = true;
                 MainLogsGrid.ScrollIntoView(log);
+                _isProgrammaticScroll = false;
             }
-            catch { }
+            catch
+            {
+                _isProgrammaticScroll = false;
+            }
         }
+
+        // --- CRITICAL FIX: PREVENTS AUTO-SCROLLING HORIZONTALLY ON CLICK ---
+        private void DataGrid_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+        {
+            // If this event wasn't triggered by our code (MapsToLogRow), suppress it.
+            // This stops the DataGrid from jumping to the end of the line when clicking a long message.
+            if (!_isProgrammaticScroll)
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Additional handler for Cells and Rows - more aggressive prevention
+        private void DataGrid_Cell_RequestBringIntoView(object sender, RequestBringIntoViewEventArgs e)
+        {
+            // ALWAYS suppress RequestBringIntoView from cells and rows unless it's our code
+            if (!_isProgrammaticScroll)
+            {
+                e.Handled = true;
+            }
+        }
+
+        // Prevent horizontal scroll on cell click
+        private void DataGrid_Cell_MouseDown(object sender, MouseButtonEventArgs e)
+        {
+            // When user clicks a cell, prevent auto-scrolling by keeping focus on the row, not cell
+            if (sender is DataGridCell cell)
+            {
+                // Find the parent DataGrid
+                var grid = FindVisualParent<DataGrid>(cell);
+                if (grid != null)
+                {
+                    // Get the row
+                    var row = FindVisualParent<DataGridRow>(cell);
+                    if (row != null && !row.IsSelected)
+                    {
+                        // Select the row without bringing the cell into view
+                        row.IsSelected = true;
+                        e.Handled = true;
+                    }
+                }
+            }
+        }
+
+        // Helper to find parent in visual tree
+        private T FindVisualParent<T>(DependencyObject child) where T : DependencyObject
+        {
+            var parentObject = VisualTreeHelper.GetParent(child);
+            if (parentObject == null) return null;
+            if (parentObject is T parent) return parent;
+            return FindVisualParent<T>(parentObject);
+        }
+
+        // Store the last user-initiated horizontal scroll position
+        private double _lastUserHorizontalOffset = 0;
+        private bool _isUserScrolling = false;
+
+        private void DataGrid_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (sender is DataGrid grid)
+            {
+                // Find the ScrollViewer inside the DataGrid
+                var scrollViewer = FindVisualChild<ScrollViewer>(grid);
+                if (scrollViewer != null)
+                {
+                    // Subscribe to scroll changes
+                    scrollViewer.ScrollChanged += (s, args) =>
+                    {
+                        // If horizontal offset changed and it wasn't programmatic scroll or user scroll
+                        if (args.HorizontalChange != 0 && !_isProgrammaticScroll && !_isUserScrolling)
+                        {
+                            // This is auto-scroll from cell selection - prevent it!
+                            scrollViewer.ScrollToHorizontalOffset(_lastUserHorizontalOffset);
+                        }
+                        else if (args.HorizontalChange != 0 && _isUserScrolling)
+                        {
+                            // User initiated scroll - remember this position
+                            _lastUserHorizontalOffset = scrollViewer.HorizontalOffset;
+                        }
+                    };
+
+                    // Detect user-initiated scrolling
+                    scrollViewer.PreviewMouseWheel += (s, args) => { _isUserScrolling = true; };
+                    scrollViewer.PreviewMouseDown += (s, args) => { _isUserScrolling = true; };
+                    scrollViewer.PreviewMouseUp += (s, args) => {
+                        _isUserScrolling = false;
+                        _lastUserHorizontalOffset = scrollViewer.HorizontalOffset;
+                    };
+                }
+            }
+        }
+
+        // Helper to find child in visual tree
+        private T FindVisualChild<T>(DependencyObject parent) where T : DependencyObject
+        {
+            for (int i = 0; i < VisualTreeHelper.GetChildrenCount(parent); i++)
+            {
+                var child = VisualTreeHelper.GetChild(parent, i);
+                if (child is T typedChild)
+                    return typedChild;
+
+                var childOfChild = FindVisualChild<T>(child);
+                if (childOfChild != null)
+                    return childOfChild;
+            }
+            return null;
+        }
+
 
         // --- Copy Logic ---
         private void MainLogsGrid_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -141,13 +259,12 @@ namespace IndiLogs_3._0
 
         private void OnScreenshotMouseWheel(object sender, MouseWheelEventArgs e)
         {
-            // אם לוחצים על CTRL - מבצעים זום
             if ((Keyboard.Modifiers & ModifierKeys.Control) == ModifierKeys.Control && DataContext is MainViewModel vm)
             {
                 if (e.Delta > 0) vm.ZoomInCommand.Execute(null);
                 else vm.ZoomOutCommand.Execute(null);
 
-                e.Handled = true; // מונע מה-ScrollViewer לגלול אנכית
+                e.Handled = true;
             }
         }
 
@@ -156,13 +273,11 @@ namespace IndiLogs_3._0
             var scrollViewer = GetScreenshotScrollViewer();
             if (scrollViewer == null) return;
 
-            // ביטול PanningMode כדי לאפשר גרירה ידנית
             scrollViewer.PanningMode = PanningMode.None;
 
             _lastMousePosition = e.GetPosition(scrollViewer);
             _isDragging = true;
 
-            // תופסים את העכבר כדי שהגרירה תעבוד גם אם יוצאים מהתמונה
             if (sender is FrameworkElement el) el.CaptureMouse();
 
             scrollViewer.Cursor = Cursors.SizeAll;
@@ -176,11 +291,9 @@ namespace IndiLogs_3._0
 
             Point currentPos = e.GetPosition(scrollViewer);
 
-            // חישוב המרחק שהעכבר זז
             double deltaX = _lastMousePosition.X - currentPos.X;
             double deltaY = _lastMousePosition.Y - currentPos.Y;
 
-            // הזזת הגלילה בהתאם
             scrollViewer.ScrollToHorizontalOffset(scrollViewer.HorizontalOffset + deltaX);
             scrollViewer.ScrollToVerticalOffset(scrollViewer.VerticalOffset + deltaY);
 
@@ -197,22 +310,12 @@ namespace IndiLogs_3._0
             if (sender is FrameworkElement el) el.ReleaseMouseCapture();
 
             scrollViewer.Cursor = Cursors.Arrow;
-            scrollViewer.PanningMode = PanningMode.Both; // החזרה למצב רגיל
+            scrollViewer.PanningMode = PanningMode.Both;
         }
 
-        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e)
-        {
-
-        }
-
-        private void GraphsView_Loaded(object sender, RoutedEventArgs e)
-        {
-
-        }
-
-        private void Button_Click(object sender, RoutedEventArgs e)
-        {
-
-        }
+        private void TabControl_SelectionChanged(object sender, SelectionChangedEventArgs e) { }
+        private void GraphsView_Loaded(object sender, RoutedEventArgs e) { }
+        private void Button_Click(object sender, RoutedEventArgs e) { }
     }
+
 }
