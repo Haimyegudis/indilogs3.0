@@ -188,11 +188,22 @@
             </Setter>
 
             <Style.Triggers>
+                <DataTrigger Binding="{Binding Level}" Value="Error">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="ERROR">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Level}" Value="Fatal">
+                    <Setter Property="Foreground" Value="White"/>
+                </DataTrigger>
+
                 <Trigger Property="IsSelected" Value="True">
-                    <Setter Property="Background" Value="{DynamicResource PrimaryGlow}"/>
-                    <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColor}" />
-                    <Setter Property="BorderThickness" Value="3,0,0,0" />
+                    <Setter Property="Background" Value="#FFEB3B"/>
+                    <Setter Property="Foreground" Value="Black"/>
+                    <Setter Property="BorderBrush" Value="Transparent"/>
                 </Trigger>
+
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#1AFFFFFF"/>
                 </Trigger>

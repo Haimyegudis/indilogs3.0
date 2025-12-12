@@ -3,10 +3,10 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:models="clr-namespace:IndiLogs_3._0.Models"
-        Title="Filter Editor" Height="600" Width="850"
+        Title="Filter Editor" Height="650" Width="950"
         WindowStartupLocation="CenterOwner" 
-        Background="White"
-        FontFamily="{DynamicResource GlobalFontFamily}">
+        Background="{DynamicResource BgDark}"
+        Foreground="{DynamicResource TextPrimary}">
 
     <Window.Resources>
         <x:Array x:Key="FilterFields" Type="sys:String">
@@ -14,6 +14,7 @@
             <sys:String>Level</sys:String>
             <sys:String>ThreadName</sys:String>
             <sys:String>Logger</sys:String>
+            <sys:String>ProcessName</sys:String>
         </x:Array>
 
         <x:Array x:Key="ConditionOperators" Type="sys:String">
@@ -24,165 +25,173 @@
             <sys:String>Regex</sys:String>
         </x:Array>
 
+        <Style TargetType="ComboBox">
+            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Height" Value="35"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+        </Style>
+        <Style TargetType="TextBox">
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Margin" Value="5"/>
+            <Setter Property="Height" Value="35"/>
+            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="VerticalContentAlignment" Value="Center"/>
+            <Setter Property="Background" Value="{DynamicResource BgCard}"/>
+            <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="CaretBrush" Value="{DynamicResource PrimaryColor}"/>
+        </Style>
+
         <Style x:Key="OperatorLinkStyle" TargetType="TextBlock">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="14"/>
-            <Setter Property="TextDecorations" Value="Underline"/>
-            <Setter Property="Foreground" Value="#2E7D32"/>
+            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="Foreground" Value="{DynamicResource SuccessColor}"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
-                    <Setter Property="Foreground" Value="#1B5E20"/>
+                    <Setter Property="TextDecorations" Value="Underline"/>
                 </Trigger>
+                <DataTrigger Binding="{Binding LogicalOperator}" Value="OR">
+                    <Setter Property="Foreground" Value="{DynamicResource PrimaryColor}"/>
+                </DataTrigger>
                 <DataTrigger Binding="{Binding LogicalOperator}" Value="NOT AND">
-                    <Setter Property="Foreground" Value="#C62828"/>
+                    <Setter Property="Foreground" Value="{DynamicResource DangerColor}"/>
                 </DataTrigger>
                 <DataTrigger Binding="{Binding LogicalOperator}" Value="NOT OR">
-                    <Setter Property="Foreground" Value="#C62828"/>
+                    <Setter Property="Foreground" Value="{DynamicResource DangerColor}"/>
                 </DataTrigger>
             </Style.Triggers>
         </Style>
 
         <HierarchicalDataTemplate DataType="{x:Type models:FilterNode}" ItemsSource="{Binding Children}">
-            <Grid Margin="0,2">
+            <Border Background="{DynamicResource BgCard}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="4,6" Padding="12">
+                <StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                        <StackPanel.Style>
+                            <Style TargetType="StackPanel">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Type}" Value="Group">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </StackPanel.Style>
 
-                <StackPanel Orientation="Horizontal" Margin="0,4">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Type}" Value="Group">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
+                        <TextBlock Text="{Binding LogicalOperator}" 
+                                   Style="{StaticResource OperatorLinkStyle}" 
+                                   ToolTip="Right-click to change logic or add items"
+                                   Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                            <TextBlock.ContextMenu>
+                                <ContextMenu FontSize="14">
+                                    <MenuItem Header="AND (All must match)" Command="{Binding PlacementTarget.Tag.SetAndCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                    <MenuItem Header="OR (At least one)" Command="{Binding PlacementTarget.Tag.SetOrCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                    <Separator/>
+                                    <MenuItem Header="NOT AND (NAND)" Command="{Binding PlacementTarget.Tag.SetNotAndCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                    <MenuItem Header="NOT OR (NOR)" Command="{Binding PlacementTarget.Tag.SetNotOrCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
+                                    <Separator/>
+                                    <MenuItem Header="Add Condition" Command="{Binding PlacementTarget.Tag.AddConditionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="➕"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <MenuItem Header="Add Sub-Group" Command="{Binding PlacementTarget.Tag.AddGroupCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="📂"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                    <Separator/>
+                                    <MenuItem Header="Remove This Group" Command="{Binding PlacementTarget.Tag.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}" Foreground="Red">
+                                        <MenuItem.Icon>
+                                            <TextBlock Text="🗑"/>
+                                        </MenuItem.Icon>
+                                    </MenuItem>
+                                </ContextMenu>
+                            </TextBlock.ContextMenu>
+                        </TextBlock>
+                        <TextBlock Text=" (Group)" Foreground="{DynamicResource TextSecondary}" FontSize="14" VerticalAlignment="Center" Margin="8,0,0,0" FontStyle="Italic"/>
+                    </StackPanel>
 
-                    <TextBlock Text="{Binding LogicalOperator}" 
-                       Style="{StaticResource OperatorLinkStyle}" 
-                       ToolTip="Right-click options"
-                       Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
+                    <Grid>
+                        <Grid.Style>
+                            <Style TargetType="Grid">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Type}" Value="Condition">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Grid.Style>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="160"/>
+                            <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="50"/>
+                        </Grid.ColumnDefinitions>
 
-                        <TextBlock.ContextMenu>
-                            <ContextMenu>
-                                <MenuItem Header="Change Operator" FontWeight="Bold" IsEnabled="False"/>
+                        <TextBlock Grid.Column="0" Text="Where" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="16" FontWeight="SemiBold"/>
 
-                                <MenuItem Header="AND" 
-                                  Command="{Binding PlacementTarget.Tag.SetAndCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="🟢"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
+                        <ComboBox Grid.Column="1" ItemsSource="{StaticResource FilterFields}" SelectedItem="{Binding Field}" FontSize="14"/>
+                        <ComboBox Grid.Column="2" ItemsSource="{StaticResource ConditionOperators}" SelectedItem="{Binding Operator}" FontSize="14"/>
+                        <TextBox Grid.Column="3" Text="{Binding Value}" FontSize="14"/>
 
-                                <MenuItem Header="OR" 
-                                  Command="{Binding PlacementTarget.Tag.SetOrCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="🟢"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-
-                                <MenuItem Header="NOT AND (NAND)" 
-                                  Command="{Binding PlacementTarget.Tag.SetNotAndCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="🔴"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-
-                                <MenuItem Header="NOT OR (NOR)" 
-                                  Command="{Binding PlacementTarget.Tag.SetNotOrCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="🔴"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-
-                                <Separator/>
-                                <MenuItem Header="Actions" FontWeight="Bold" IsEnabled="False"/>
-
-                                <MenuItem Header="Add Condition" 
-                                  Command="{Binding PlacementTarget.Tag.AddConditionCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="➕"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-
-                                <MenuItem Header="Add Group" 
-                                  Command="{Binding PlacementTarget.Tag.AddGroupCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="📂"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-
-                                <Separator/>
-
-                                <MenuItem Header="Remove Group" 
-                                  Command="{Binding PlacementTarget.Tag.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" 
-                                  CommandParameter="{Binding}">
-                                    <MenuItem.Icon>
-                                        <TextBlock Text="🗑"/>
-                                    </MenuItem.Icon>
-                                </MenuItem>
-                            </ContextMenu>
-                        </TextBlock.ContextMenu>
-            </TextBlock>
-
-                    <TextBlock Text=" (Right Click)" Foreground="#999" FontSize="10" VerticalAlignment="Center" Margin="5,0,0,0" FontStyle="Italic" IsHitTestVisible="False"/>
+                        <Button Grid.Column="4" Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                CommandParameter="{Binding}" 
+                                Content="✕" Style="{DynamicResource ModernBtn}" Background="Transparent" Foreground="{DynamicResource DangerColor}" FontWeight="Bold" FontSize="16"/>
+                    </Grid>
                 </StackPanel>
-
-                <StackPanel Orientation="Horizontal" Margin="20,2,0,2">
-                    <StackPanel.Style>
-                        <Style TargetType="StackPanel">
-                            <Setter Property="Visibility" Value="Collapsed"/>
-                            <Style.Triggers>
-                                <DataTrigger Binding="{Binding Type}" Value="Condition">
-                                    <Setter Property="Visibility" Value="Visible"/>
-                                </DataTrigger>
-                            </Style.Triggers>
-                        </Style>
-                    </StackPanel.Style>
-
-                    <TextBlock Text="Where " Foreground="Gray" VerticalAlignment="Center"/>
-                    <ComboBox ItemsSource="{StaticResource FilterFields}" SelectedItem="{Binding Field}" Width="110" Margin="2"/>
-                    <ComboBox ItemsSource="{StaticResource ConditionOperators}" SelectedItem="{Binding Operator}" Width="100" Margin="2"/>
-                    <TextBox Text="{Binding Value}" Width="150" Margin="2"/>
-
-                    <Button Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
-                    CommandParameter="{Binding}" 
-                    Content="✕" Background="Transparent" BorderThickness="0" Foreground="Red" FontWeight="Bold" Margin="5,0"/>
-                </StackPanel>
-            </Grid>
+            </Border>
         </HierarchicalDataTemplate>
     </Window.Resources>
 
-    <Grid Margin="15">
+    <Grid Margin="25">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <TextBlock Grid.Row="0" Text="Advanced Filter Editor" FontSize="18" FontWeight="SemiBold" Margin="0,0,0,10"/>
+        <StackPanel Grid.Row="0" Margin="0,0,0,20">
+            <TextBlock Text="Advanced Filter Editor" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+            <TextBlock Text="Build complex queries using groups and logic gates. Right-click on operators (AND/OR) to add conditions." Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0" FontSize="14"/>
+        </StackPanel>
 
-        <Border Grid.Row="1" BorderBrush="#DDDDDD" BorderThickness="1" CornerRadius="3" Background="#FAFAFA">
-            <TreeView ItemsSource="{Binding RootNodes}" BorderThickness="0" Background="Transparent" Padding="10">
+        <Border Grid.Row="1" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="8">
+            <TreeView ItemsSource="{Binding RootNodes}" BorderThickness="0" Background="Transparent" Padding="15">
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem">
                         <Setter Property="IsExpanded" Value="True"/>
-                        <Setter Property="Margin" Value="0,2"/>
+                        <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TreeViewItem">
+                                    <Grid>
+                                        <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto"/>
+                                            <RowDefinition />
+                                        </Grid.RowDefinitions>
+                                        <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
+                                            <ContentPresenter Name="PART_Header" ContentSource="Header" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
+                                        </Border>
+                                        <ItemsPresenter Name="ItemsHost" Grid.Row="1" Margin="25,0,0,0"/>
+                                    </Grid>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </TreeView.ItemContainerStyle>
             </TreeView>
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,15,0,0">
-            <Button Content="🗑 Clear All" Click="Clear_Click" Style="{DynamicResource ModernBtn}" Background="#EF4444" Foreground="White"/>
-            <Button Content="✔ Apply" Click="Apply_Click" Style="{DynamicResource ModernBtn}" Background="#10B981" Foreground="White" Margin="10,0"/>
-            <Button Content="✖ Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Background="#6C757D" Foreground="White"/>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,25,0,0">
+            <Button Content="🗑 Reset" Click="Clear_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource DangerColor}" Foreground="White" Width="120" Height="40" FontSize="14"/>
+            <Button Content="✔ Apply Filter" Click="Apply_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource SuccessColor}" Foreground="White" Margin="15,0" Width="140" Height="40" FontSize="14" FontWeight="Bold"/>
+            <Button Content="Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Width="120" Height="40" FontSize="14"/>
         </StackPanel>
     </Grid>
 </Window>
