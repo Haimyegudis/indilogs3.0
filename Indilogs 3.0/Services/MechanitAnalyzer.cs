@@ -1,4 +1,8 @@
-﻿using System;
+﻿// BILINGUAL-HEADER-START
+// EN: File: MechanitAnalyzer.cs - Auto-added bilingual header.
+// HE: קובץ: MechanitAnalyzer.cs - כותרת דו-לשונית שנוספה אוטומטית.
+
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using IndiLogs_3._0.Models;
@@ -85,7 +89,8 @@ namespace IndiLogs_3._0.Services.Analysis
 
             var result = new AnalysisResult
             {
-                ProcessName = $"Run #{runIndex} ({startTime:HH:mm:ss})",
+                // שינוי שם התהליך כפי שביקשת
+                ProcessName = $"Mechanit #{runIndex} ({startTime:HH:mm:ss})",
                 Steps = new List<AnalysisStep>(),
                 ErrorsFound = new List<string>()
             };

@@ -1,4 +1,8 @@
-﻿using IndiLogs_3._0.Models;
+﻿// BILINGUAL-HEADER-START
+// EN: File: LogFileService.cs - Auto-added bilingual header.
+// HE: קובץ: LogFileService.cs - כותרת דו-לשונית שנוספה אוטומטית.
+
+using IndiLogs_3._0.Models;
 using Indigo.Infra.ICL.Core.Logging;
 using System;
 using System.Collections.Concurrent;
@@ -53,6 +57,10 @@ namespace IndiLogs_3._0.Services
 
                 long processedBytesGlobal = 0;
 
+                // משתנים זמניים לשמירת הגרסאות
+                string detectedSwVersion = "Unknown";
+                string detectedPlcVersion = "Unknown";
+
                 try
                 {
                     foreach (var filePath in filePaths)
@@ -78,7 +86,6 @@ namespace IndiLogs_3._0.Services
                                 {
                                     extractedCount++;
 
-                                    // דיווח התקדמות: אופטימיזציה - דיווח כל 100 קבצים במקום 10
                                     if (extractedCount % 100 == 0)
                                     {
                                         double extractRatio = (double)extractedCount / totalEntries;
@@ -89,8 +96,6 @@ namespace IndiLogs_3._0.Services
 
                                     if (entry.Length == 0) continue;
 
-                                    // --- אופטימיזציה: סינון קבצים מיותרים ---
-                                    // דלג על קבצים שנראים כמו גיבויים או קבצים זמניים
                                     if (entry.Name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ||
                                         entry.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
                                         entry.Name.IndexOf("backup", StringComparison.OrdinalIgnoreCase) >= 0)
@@ -100,21 +105,16 @@ namespace IndiLogs_3._0.Services
 
                                     var entryData = new ZipEntryData { Name = entry.Name };
 
-                                    // 1. זיהוי APP LOGS (לפי נתיב ושם קובץ)
                                     bool isAppDevPath = entry.FullName.IndexOf("IndigoLogs/Logger Files", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                         entry.FullName.IndexOf("IndigoLogs\\Logger Files", StringComparison.OrdinalIgnoreCase) >= 0;
 
                                     bool isAppLogName = entry.Name.IndexOf("APPDEV", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                         entry.Name.IndexOf("PRESS.HOST.APP", StringComparison.OrdinalIgnoreCase) >= 0;
 
-                                    // 2. זיהוי MAIN LOGS - טוען רק engineGroupA ולא כל קובץ .log כדי לחסוך זמן
                                     bool isMainLogName = entry.Name.IndexOf("engineGroupA.file", StringComparison.OrdinalIgnoreCase) >= 0;
 
-                                    // 3. זיהוי EVENTS - טוען רק Events.csv כדי למנוע טעינת CSV ענקיים לא רלוונטיים
                                     bool isEventsCsv = entry.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) &&
                                                        entry.Name.IndexOf("Events", StringComparison.OrdinalIgnoreCase) >= 0;
-
-                                    // --- לוגיקת ההחלטה ---
 
                                     if (isAppDevPath && isAppLogName)
                                     {
@@ -124,7 +124,6 @@ namespace IndiLogs_3._0.Services
                                     }
                                     else if (isMainLogName)
                                     {
-                                        // הסרנו את התנאי הכללי (entry.Name.EndsWith(".log")) כדי לא לטעון לוגים לא נחוצים
                                         entryData.Type = FileType.MainLog;
                                         entryData.Stream = CopyToMemory(entry);
                                         filesToProcess.Add(entryData);
@@ -142,20 +141,33 @@ namespace IndiLogs_3._0.Services
                                         var bmp = LoadBitmapFromStream(ms);
                                         if (bmp != null) screenshotsBag.Add(bmp);
                                     }
+                                    // --- חילוץ גרסאות ---
                                     else if (entry.Name.Equals("Readme.txt", StringComparison.OrdinalIgnoreCase))
                                     {
                                         using (var ms = CopyToMemory(entry))
                                         using (var r = new StreamReader(ms))
                                         {
                                             session.PressConfiguration = r.ReadToEnd();
-                                            session.VersionsInfo = ExtractVersionsFromReadme(session.PressConfiguration);
+                                            var (sw, plc) = ParseReadmeVersions(session.PressConfiguration);
+
+                                            // עדכון רק אם מצאנו משהו ב-Readme, ואם טרם מצאנו מקור טוב יותר (למשל SetupInfo ל-PLC)
+                                            if (sw != "Unknown") detectedSwVersion = sw;
+                                            if (plc != "Unknown" && detectedPlcVersion == "Unknown") detectedPlcVersion = plc;
                                         }
                                     }
                                     else if (entry.Name.EndsWith("_setupInfo.json", StringComparison.OrdinalIgnoreCase))
                                     {
                                         using (var ms = CopyToMemory(entry))
                                         using (var r = new StreamReader(ms))
+                                        {
                                             session.SetupInfo = r.ReadToEnd();
+                                            // setupInfo הוא המקור המוסמך ל-PLC
+                                            string plcVer = ExtractPlcVersionFromSetupInfo(session.SetupInfo);
+                                            if (!string.IsNullOrEmpty(plcVer))
+                                            {
+                                                detectedPlcVersion = plcVer;
+                                            }
+                                        }
                                     }
                                 }
 
@@ -193,7 +205,6 @@ namespace IndiLogs_3._0.Services
                         }
                         else
                         {
-                            // טעינת קובץ בודד (לא ZIP)
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var ms = new MemoryStream())
                             {
@@ -214,6 +225,9 @@ namespace IndiLogs_3._0.Services
                     }
 
                     progress?.Report((98, "Sorting..."));
+
+                    // עדכון הגרסאות הסופי במודל
+                    session.VersionsInfo = $"SW: {detectedSwVersion} | PLC: {detectedPlcVersion}";
 
                     session.Logs = logsBag.OrderByDescending(x => x.Date).ToList();
                     session.AppDevLogs = appDevLogsBag.OrderByDescending(x => x.Date).ToList();
@@ -299,7 +313,7 @@ namespace IndiLogs_3._0.Services
                 Level = match.Groups["Level"].Value.ToUpper(),
                 Logger = match.Groups["Logger"].Value,
                 Message = message,
-                ProcessName = "APP" // סימון שזה לוג של האפליקציה
+                ProcessName = "APP"
             };
         }
 
@@ -342,7 +356,6 @@ namespace IndiLogs_3._0.Services
                     if (header == null) return list;
                     var headers = header.Split(',');
 
-                    // מיפוי עמודות
                     int timeIdx = Array.IndexOf(headers, "Time");
                     int nameIdx = Array.IndexOf(headers, "Name");
                     int stateIdx = Array.IndexOf(headers, "State");
@@ -420,15 +433,37 @@ namespace IndiLogs_3._0.Services
             catch { return null; }
         }
 
-        private string ExtractVersionsFromReadme(string content)
+        // שינוי: פיצלתי את הפונקציה כדי להחזיר טאפל של (SW, PLC)
+        private (string sw, string plc) ParseReadmeVersions(string content)
         {
             try
             {
                 var sw = Regex.Match(content, @"Version[:=]\s*(.+)", RegexOptions.IgnoreCase);
                 var plc = Regex.Match(content, @"PressPlcVersion[:=]\s*(.+)", RegexOptions.IgnoreCase);
-                return $"SW: {(sw.Success ? sw.Groups[1].Value.Trim() : "Unknown")} | PLC: {(plc.Success ? plc.Groups[1].Value.Trim() : "Unknown")}";
+
+                string swVer = sw.Success ? sw.Groups[1].Value.Trim() : "Unknown";
+                string plcVer = plc.Success ? plc.Groups[1].Value.Trim() : "Unknown";
+
+                return (swVer, plcVer);
             }
-            catch { return ""; }
+            catch { return ("Unknown", "Unknown"); }
+        }
+
+        private string ExtractPlcVersionFromSetupInfo(string jsonContent)
+        {
+            try
+            {
+                var match = Regex.Match(jsonContent,
+                    @"\""Name\""\s*:\s*\""press-content-mcs-plc\""[\s\S]*?\""Version\""\s*:\s*\""(?<ver>[^\""]+)\""",
+                    RegexOptions.IgnoreCase);
+
+                if (match.Success)
+                {
+                    return match.Groups["ver"].Value.Trim();
+                }
+            }
+            catch { }
+            return null;
         }
     }
 }

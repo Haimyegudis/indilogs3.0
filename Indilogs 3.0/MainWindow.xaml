@@ -789,7 +789,7 @@
                         </DataGrid>
                     </TabItem>
 
-                    <TabItem Header="APP LOGS">
+                    <TabItem Header="APP">
                         <Grid>
                             <Grid.RowDefinitions>
                                 <RowDefinition Height="Auto"/>
