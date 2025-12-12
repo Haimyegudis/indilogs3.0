@@ -18,16 +18,11 @@ namespace IndiLogs_3._0.Views
             // קישור הנתונים לחלון עצמו
             this.DataContext = this;
 
-            // בחירה אוטומטית של הריצה הראשונה (אם קיימת)
+            // בחירה אוטומטית של הריצה הראשונה (אם קיימת) כדי שהמשתמש יראה משהו מיד
             if (AllResults != null && AllResults.Any())
             {
                 RunsList.SelectedIndex = 0;
             }
-        }
-
-        private void RunsList_SelectionChanged(object sender, System.Windows.Controls.SelectionChangedEventArgs e)
-        {
-            // ה-Binding ב-XAML כבר מטפל בעדכון צד ימין
         }
 
         private void Close_Click(object sender, RoutedEventArgs e)

@@ -317,5 +317,4 @@ namespace IndiLogs_3._0
         private void GraphsView_Loaded(object sender, RoutedEventArgs e) { }
         private void Button_Click(object sender, RoutedEventArgs e) { }
     }
-
 }

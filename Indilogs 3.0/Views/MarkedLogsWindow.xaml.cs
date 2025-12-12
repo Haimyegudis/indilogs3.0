@@ -1,22 +1,23 @@
 ﻿using IndiLogs_3._0.Models;
 using System;
-using System.Collections.Generic; // הוסף
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Text;
 using System.Windows;
+using System.Windows.Controls; // Added for DataGrid
 using System.Windows.Input;
 
 namespace IndiLogs_3._0.Views
 {
     public partial class MarkedLogsWindow : Window
     {
-        // שיניתי את סוג הפרמטר ל-IEnumerable כדי לקבל כל סוג של רשימה
+        public LogEntry SelectedItem { get; set; }
+
         public MarkedLogsWindow(IEnumerable<LogEntry> logsToShow, string title)
         {
             InitializeComponent();
             this.Title = title;
-            // המרה לאוסף שה-ListBox יודע להציג
             MarkedList.ItemsSource = new ObservableCollection<LogEntry>(logsToShow);
         }
 
@@ -39,7 +40,7 @@ namespace IndiLogs_3._0.Views
             if (MarkedList.SelectedItems.Count == 0) return;
 
             var sb = new StringBuilder();
-            var items = MarkedList.SelectedItems.Cast<LogEntry>().ToList(); // שומר על הסדר שמוצג בחלון
+            var items = MarkedList.SelectedItems.Cast<LogEntry>().ToList();
             int maxThreadLength = Math.Max(10, items.Max(i => (i.ThreadName ?? "").Length));
 
             foreach (var log in items)

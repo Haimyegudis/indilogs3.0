@@ -132,7 +132,7 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto" MinWidth="220" MaxWidth="400"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
@@ -151,6 +151,7 @@
                 </Grid.Style>
 
                 <TabControl Background="Transparent" BorderThickness="0" Margin="0" Padding="0" SelectedIndex="{Binding LeftTabIndex}">
+
                     <TabItem Header="EXPLORER">
                         <Grid>
                             <Grid.RowDefinitions>
@@ -329,6 +330,7 @@
                                 <RowDefinition Height="*"/>
                                 <RowDefinition Height="Auto"/>
                             </Grid.RowDefinitions>
+
                             <TreeView Grid.Row="0" ItemsSource="{Binding LoggerTreeRoot}" 
                                       Background="Transparent" 
                                       BorderThickness="0" 
@@ -373,6 +375,99 @@
                                     </HierarchicalDataTemplate>
                                 </TreeView.ItemTemplate>
                             </TreeView>
+
+                            <Grid Grid.Row="1" VerticalAlignment="Bottom" Margin="10,0,10,10">
+                                <Grid.RowDefinitions>
+                                    <RowDefinition Height="Auto"/>
+                                    <RowDefinition Height="Auto"/>
+                                </Grid.RowDefinitions>
+
+                                <Border Grid.Row="0" 
+                                        Background="{DynamicResource BgCard}" 
+                                        BorderBrush="{DynamicResource BorderColor}" 
+                                        BorderThickness="1" 
+                                        CornerRadius="8" 
+                                        Padding="10" 
+                                        Margin="0,0,0,10"
+                                        Visibility="{Binding IsExplorerMenuOpen, Converter={StaticResource BooleanToVisibilityConverter}}">
+                                    <Border.Effect>
+                                        <DropShadowEffect Color="Black" Opacity="0.2" BlurRadius="10" ShadowDepth="2"/>
+                                    </Border.Effect>
+
+                                    <StackPanel>
+                                        <DockPanel LastChildFill="False" Margin="0,0,0,8">
+                                            <TextBlock Text="Actions" FontWeight="Bold" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" FontSize="11"/>
+                                        </DockPanel>
+
+                                        <Button Command="{Binding OpenMarkedLogsWindowCommand}" Style="{DynamicResource ModernBtn}" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Foreground="{DynamicResource TextPrimary}" Margin="0,0,0,5">
+                                            <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                                                <TextBlock Text="📌 Marked Lines"/>
+                                            </Viewbox>
+                                        </Button>
+                                    </StackPanel>
+                                </Border>
+
+                                <Button Grid.Row="1" 
+                                        Command="{Binding ToggleExplorerMenuCommand}"
+                                        Background="{DynamicResource BgCard}"
+                                        BorderBrush="{DynamicResource BorderColor}"
+                                        BorderThickness="1"
+                                        HorizontalAlignment="Left"
+                                        Width="40" Height="40"
+                                        ToolTip="Show Actions">
+                                    <Button.Template>
+                                        <ControlTemplate TargetType="Button">
+                                            <Border x:Name="border" 
+                                                    Background="{TemplateBinding Background}" 
+                                                    BorderBrush="{TemplateBinding BorderBrush}" 
+                                                    BorderThickness="{TemplateBinding BorderThickness}" 
+                                                    CornerRadius="20">
+                                                <Border.Effect>
+                                                    <DropShadowEffect Color="Black" Opacity="0.15" BlurRadius="5" ShadowDepth="2"/>
+                                                </Border.Effect>
+                                                <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                            </Border>
+                                            <ControlTemplate.Triggers>
+                                                <Trigger Property="IsMouseOver" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource BgCardHover}"/>
+                                                    <Setter TargetName="border" Property="BorderBrush" Value="{DynamicResource PrimaryColor}"/>
+                                                </Trigger>
+                                                <Trigger Property="IsPressed" Value="True">
+                                                    <Setter TargetName="border" Property="Background" Value="{DynamicResource PrimaryColor}"/>
+                                                    <Setter Property="Foreground" Value="White"/>
+                                                </Trigger>
+                                            </ControlTemplate.Triggers>
+                                        </ControlTemplate>
+                                    </Button.Template>
+
+                                    <Grid>
+                                        <TextBlock Text="••" FontSize="20" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center" Margin="0,-8,0,0">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Visible"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExplorerMenuOpen}" Value="True">
+                                                            <Setter Property="Visibility" Value="Collapsed"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                        <TextBlock Text="✕" FontSize="14" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}" HorizontalAlignment="Center" VerticalAlignment="Center">
+                                            <TextBlock.Style>
+                                                <Style TargetType="TextBlock">
+                                                    <Setter Property="Visibility" Value="Collapsed"/>
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding IsExplorerMenuOpen}" Value="True">
+                                                            <Setter Property="Visibility" Value="Visible"/>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </TextBlock.Style>
+                                        </TextBlock>
+                                    </Grid>
+                                </Button>
+                            </Grid>
                         </Grid>
                     </TabItem>
                 </TabControl>
@@ -393,8 +488,8 @@
             <Grid Grid.Column="2">
                 <Grid.RowDefinitions>
                     <RowDefinition Height="*"/>
-                    <RowDefinition Height="Auto"/>
-                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="5"/>
+                    <RowDefinition Height="180"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
 
@@ -432,7 +527,7 @@
                                   RowStyle="{DynamicResource LogRowStyle}" 
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow"
-                                  HorizontalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
                                   PreviewKeyDown="MainLogsGrid_PreviewKeyDown"
                                   RequestBringIntoView="DataGrid_RequestBringIntoView"
                                   Loaded="DataGrid_Loaded">
@@ -474,16 +569,17 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <DataGridTemplateColumn Header="Message" Width="Auto">
+                                <DataGridTemplateColumn Header="Message" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <controls:HighlightTextBlock 
-                    Text="{Binding Message}" 
-                    HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
-                    VerticalAlignment="Center">
+                                                Text="{Binding Message}" 
+                                                HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                VerticalAlignment="Center">
                                                 <controls:HighlightTextBlock.Style>
                                                     <Style TargetType="controls:HighlightTextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Level}" Value="Error">
                                                                 <Setter Property="Foreground" Value="White"/>
@@ -508,7 +604,7 @@
                                   RowStyle="{DynamicResource LogRowStyle}"
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow"
-                                  HorizontalScrollBarVisibility="Auto"
+                                  HorizontalScrollBarVisibility="Disabled"
                                   RequestBringIntoView="DataGrid_RequestBringIntoView">
                             <DataGrid.InputBindings>
                                 <MouseBinding Gesture="LeftDoubleClick" Command="{Binding ViewLogDetailsCommand}" CommandParameter="{Binding SelectedLog}" />
@@ -536,16 +632,17 @@
                                     </DataGridTextColumn.ElementStyle>
                                 </DataGridTextColumn>
 
-                                <DataGridTemplateColumn Header="Message" Width="Auto">
+                                <DataGridTemplateColumn Header="Message" Width="*">
                                     <DataGridTemplateColumn.CellTemplate>
                                         <DataTemplate>
                                             <controls:HighlightTextBlock 
-                    Text="{Binding Message}" 
-                    HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
-                    VerticalAlignment="Center">
+                                                Text="{Binding Message}" 
+                                                HighlightText="{Binding DataContext.SearchText, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                VerticalAlignment="Center">
                                                 <controls:HighlightTextBlock.Style>
                                                     <Style TargetType="controls:HighlightTextBlock">
                                                         <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                        <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                                                         <Style.Triggers>
                                                             <DataTrigger Binding="{Binding Level}" Value="Error">
                                                                 <Setter Property="Foreground" Value="#FFFFFF"/>
@@ -592,7 +689,7 @@
                                       AutoGenerateColumns="False" IsReadOnly="True" 
                                       RowStyle="{DynamicResource LogRowStyle}" 
                                       SelectionMode="Extended" SelectionUnit="FullRow"
-                                      HorizontalScrollBarVisibility="Auto"
+                                      HorizontalScrollBarVisibility="Disabled"
                                       RequestBringIntoView="DataGrid_RequestBringIntoView">
                                 <DataGrid.InputBindings>
                                     <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
@@ -648,7 +745,7 @@
                                             </Style>
                                         </DataGridTextColumn.ElementStyle>
                                     </DataGridTextColumn>
-                                    <DataGridTemplateColumn Header="Message" Width="Auto">
+                                    <DataGridTemplateColumn Header="Message" Width="*">
                                         <DataGridTemplateColumn.CellTemplate>
                                             <DataTemplate>
                                                 <controls:HighlightTextBlock 
@@ -658,6 +755,7 @@
                                                     <controls:HighlightTextBlock.Style>
                                                         <Style TargetType="controls:HighlightTextBlock">
                                                             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
+                                                            <Setter Property="TextTrimming" Value="CharacterEllipsis"/>
                                                             <Style.Triggers>
                                                                 <DataTrigger Binding="{Binding Level}" Value="Error">
                                                                     <Setter Property="Foreground" Value="White"/>
@@ -681,7 +779,8 @@
                                   FontWeight="{DynamicResource ContentFontWeight}"
                                   AutoGenerateColumns="False" IsReadOnly="True" 
                                   RowStyle="{DynamicResource LogRowStyle}" 
-                                  CanUserAddRows="False" VerticalScrollBarVisibility="Auto">
+                                  CanUserAddRows="False" 
+                                  VerticalScrollBarVisibility="Auto">
                             <DataGrid.Columns>
                                 <DataGridTextColumn Header="Time" Binding="{Binding Time, StringFormat='yyyy-MM-dd HH:mm:ss.fff'}" Width="180"/>
                                 <DataGridTextColumn Header="Name" Binding="{Binding Name}" Width="200" FontWeight="Bold"/>
@@ -743,11 +842,19 @@
                     </TabItem>
                 </TabControl>
 
+                <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" VerticalAlignment="Center" Background="#444" ShowsPreview="True"/>
+
                 <Border Grid.Row="2" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="0,1,0,0">
                     <Border.Style>
                         <Style TargetType="Border">
                             <Setter Property="Visibility" Value="Collapsed"/>
                             <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="0">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="1">
+                                    <Setter Property="Visibility" Value="Visible"/>
+                                </DataTrigger>
                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="2">
                                     <Setter Property="Visibility" Value="Visible"/>
                                 </DataTrigger>
@@ -758,7 +865,7 @@
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="120"/>
+                            <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Background="{DynamicResource BgDark}">
@@ -1029,9 +1136,7 @@
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
-                    <!-- Fixed position animation container - prevents movement -->
                     <Grid Grid.Row="0" Width="140" Height="140" VerticalAlignment="Top" HorizontalAlignment="Center">
-                        <!-- Outer rotating ring -->
                         <Ellipse StrokeThickness="6" Width="120" Height="120" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Ellipse.Effect>
                                 <DropShadowEffect Color="{Binding Color, Source={StaticResource AnimColor1}}" BlurRadius="25" ShadowDepth="0" Opacity="1"/>
@@ -1057,7 +1162,6 @@
                             </Ellipse.Triggers>
                         </Ellipse>
 
-                        <!-- Middle rotating ring -->
                         <Ellipse StrokeThickness="4" Width="90" Height="90" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Ellipse.Effect>
                                 <DropShadowEffect Color="{Binding Color, Source={StaticResource AnimColor2}}" BlurRadius="20" ShadowDepth="0" Opacity="1"/>
@@ -1083,7 +1187,6 @@
                             </Ellipse.Triggers>
                         </Ellipse>
 
-                        <!-- Inner pulsating circle - NEW! -->
                         <Ellipse Width="60" Height="60" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Ellipse.Fill>
                                 <RadialGradientBrush>
@@ -1113,7 +1216,6 @@
                             </Ellipse.Triggers>
                         </Ellipse>
 
-                        <!-- Percentage text -->
                         <TextBlock Text="{Binding CurrentProgress, StringFormat='{}{0:0}%'}" 
                                    FontSize="24" FontWeight="Bold" Foreground="{DynamicResource AnimText}" 
                                    HorizontalAlignment="Center" VerticalAlignment="Center">
@@ -1123,7 +1225,6 @@
                         </TextBlock>
                     </Grid>
 
-                    <!-- Status message in separate fixed row -->
                     <TextBlock Grid.Row="1" 
                                Text="{Binding StatusMessage}" 
                                FontSize="16" 

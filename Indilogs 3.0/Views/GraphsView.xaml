@@ -47,7 +47,8 @@
 
     <Grid Background="White">
         <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="350"/>
+            <ColumnDefinition Width="Auto" MinWidth="250" MaxWidth="500"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
@@ -134,7 +135,9 @@
             </Grid>
         </Border>
 
-        <Grid Grid.Column="1" Background="#FAFAFA">
+        <GridSplitter Grid.Column="1" Width="4" HorizontalAlignment="Center" VerticalAlignment="Stretch" Background="#DDDDDD" ShowsPreview="True"/>
+
+        <Grid Grid.Column="2" Background="#FAFAFA">
             <Grid.RowDefinitions>
                 <RowDefinition Height="45"/>
                 <RowDefinition Height="*"/>
