@@ -95,7 +95,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <Button Command="{Binding LivePlayCommand}" 
                                 Visibility="{Binding IsPaused, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                Style="{DynamicResource ModernBtn}" ToolTip="Resume Live Monitoring" Background="Transparent" Foreground="{DynamicResource SuccessColor}" Padding="5,0">
+                                             Style="{DynamicResource ModernBtn}" ToolTip="Resume Live Monitoring" Background="Transparent" Foreground="{DynamicResource SuccessColor}" Padding="5,0">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="▶" Margin="0,0,5,0"/>
                                         <TextBlock Text="RESUME" FontWeight="Bold"/>
@@ -103,7 +103,7 @@
                                 </Button>
                                 <Button Command="{Binding LivePauseCommand}" 
                                 Visibility="{Binding IsRunning, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                Style="{DynamicResource ModernBtn}" ToolTip="Pause Live Monitoring" Background="Transparent" Foreground="{DynamicResource WarningColor}" Padding="5,0">
+                                            Style="{DynamicResource ModernBtn}" ToolTip="Pause Live Monitoring" Background="Transparent" Foreground="{DynamicResource WarningColor}" Padding="5,0">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="⏸" Margin="0,0,5,0"/>
                                         <TextBlock Text="PAUSE" FontWeight="Bold"/>
@@ -132,14 +132,26 @@
 
         <Grid Grid.Row="1">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition>
+                    <ColumnDefinition.Style>
+                        <Style TargetType="ColumnDefinition">
+                            <Setter Property="Width" Value="280"/>
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=LeftPanelTabs}" Value="1">
+                                    <Setter Property="Width" Value="Auto"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ColumnDefinition.Style>
+                </ColumnDefinition>
+
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Grid Grid.Column="0" MinWidth="220" MaxWidth="400" Background="{DynamicResource BgPanel}">
+            <Grid Grid.Column="0" MinWidth="220" Background="{DynamicResource BgPanel}">
                 <Grid.Style>
                     <Style TargetType="Grid">
                         <Style.Triggers>
@@ -150,7 +162,7 @@
                     </Style>
                 </Grid.Style>
 
-                <TabControl Background="Transparent" BorderThickness="0" Margin="0" Padding="0" SelectedIndex="{Binding LeftTabIndex}">
+                <TabControl x:Name="LeftPanelTabs" Background="Transparent" BorderThickness="0" Margin="0" Padding="0" SelectedIndex="{Binding LeftTabIndex}">
 
                     <TabItem Header="EXPLORER">
                         <Grid>
@@ -177,7 +189,11 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
                                             <TextBlock Text="📄" Margin="0,0,10,0" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center"/>
-                                            <TextBlock Grid.Column="1" Text="{Binding FileName}" ToolTip="{Binding FilePath}" TextTrimming="CharacterEllipsis" VerticalAlignment="Center"/>
+                                            <TextBlock Grid.Column="1" 
+                                                       Text="{Binding FileName}" 
+                                                       ToolTip="{Binding FilePath}" 
+                                                       TextWrapping="Wrap" 
+                                                       VerticalAlignment="Center"/>
                                         </Grid>
                                     </DataTemplate>
                                 </ListBox.ItemTemplate>
@@ -336,7 +352,7 @@
                                       Background="Transparent" 
                                       BorderThickness="0" 
                                       Padding="10"
-                                      ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                                      ScrollViewer.HorizontalScrollBarVisibility="Disabled"
                                       ScrollViewer.VerticalScrollBarVisibility="Visible"
                                       Foreground="{DynamicResource TextPrimary}">
                                 <TreeView.ItemContainerStyle>
@@ -665,7 +681,7 @@
                                   FontFamily="{DynamicResource ContentFontFamily}"
                                   FontWeight="{DynamicResource ContentFontWeight}"
                                   AutoGenerateColumns="False" IsReadOnly="True" 
-                                  RowStyle="{DynamicResource LogRowStyle}"
+                                  RowStyle="{DynamicResource LogRowStyle}" 
                                   SelectionMode="Extended"
                                   SelectionUnit="FullRow"
                                   HorizontalScrollBarVisibility="Disabled"
@@ -1353,12 +1369,12 @@
                         <Ellipse Width="60" Height="60" VerticalAlignment="Center" HorizontalAlignment="Center">
                             <Ellipse.Fill>
                                 <RadialGradientBrush>
-                                    <GradientStop Color="{Binding Color, Source={StaticResource PrimaryColor}}" Offset="0"/>
+                                    <GradientStop Color="{Binding Color, Source={StaticResource AnimColor3}}" Offset="0"/>
                                     <GradientStop Color="Transparent" Offset="1"/>
                                 </RadialGradientBrush>
                             </Ellipse.Fill>
                             <Ellipse.Effect>
-                                <DropShadowEffect Color="{Binding Color, Source={StaticResource PrimaryColor}}" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
+                                <DropShadowEffect Color="{Binding Color, Source={StaticResource AnimColor3}}" BlurRadius="30" ShadowDepth="0" Opacity="0.8"/>
                             </Ellipse.Effect>
                             <Ellipse.RenderTransform>
                                 <ScaleTransform ScaleX="1" ScaleY="1" CenterX="30" CenterY="30"/>

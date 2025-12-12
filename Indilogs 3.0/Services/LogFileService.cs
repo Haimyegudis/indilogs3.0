@@ -77,25 +77,44 @@ namespace IndiLogs_3._0.Services
                                 foreach (var entry in archive.Entries)
                                 {
                                     extractedCount++;
-                                    if (extractedCount % 10 == 0)
+
+                                    // דיווח התקדמות: אופטימיזציה - דיווח כל 100 קבצים במקום 10
+                                    if (extractedCount % 100 == 0)
                                     {
                                         double extractRatio = (double)extractedCount / totalEntries;
                                         double fileProgress = (extractRatio * 0.5) * currentFileSize;
                                         double totalPercent = ((processedBytesGlobal + fileProgress) / totalBytesAllFiles) * 100;
-                                        progress?.Report((Math.Min(99, totalPercent), $"Extracting: {entry.Name}"));
+                                        progress?.Report((Math.Min(99, totalPercent), $"Scanning zip: {entry.Name}"));
                                     }
 
                                     if (entry.Length == 0) continue;
 
+                                    // --- אופטימיזציה: סינון קבצים מיותרים ---
+                                    // דלג על קבצים שנראים כמו גיבויים או קבצים זמניים
+                                    if (entry.Name.EndsWith(".bak", StringComparison.OrdinalIgnoreCase) ||
+                                        entry.Name.EndsWith(".tmp", StringComparison.OrdinalIgnoreCase) ||
+                                        entry.Name.IndexOf("backup", StringComparison.OrdinalIgnoreCase) >= 0)
+                                    {
+                                        continue;
+                                    }
+
                                     var entryData = new ZipEntryData { Name = entry.Name };
 
-                                    // --- שינוי 1: זיהוי קבצים בתוך ZIP ---
+                                    // 1. זיהוי APP LOGS (לפי נתיב ושם קובץ)
                                     bool isAppDevPath = entry.FullName.IndexOf("IndigoLogs/Logger Files", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                         entry.FullName.IndexOf("IndigoLogs\\Logger Files", StringComparison.OrdinalIgnoreCase) >= 0;
 
-                                    // בדיקה אם השם מכיל APPDEV או PRESS.HOST.APP
                                     bool isAppLogName = entry.Name.IndexOf("APPDEV", StringComparison.OrdinalIgnoreCase) >= 0 ||
                                                         entry.Name.IndexOf("PRESS.HOST.APP", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                    // 2. זיהוי MAIN LOGS - טוען רק engineGroupA ולא כל קובץ .log כדי לחסוך זמן
+                                    bool isMainLogName = entry.Name.IndexOf("engineGroupA.file", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                    // 3. זיהוי EVENTS - טוען רק Events.csv כדי למנוע טעינת CSV ענקיים לא רלוונטיים
+                                    bool isEventsCsv = entry.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase) &&
+                                                       entry.Name.IndexOf("Events", StringComparison.OrdinalIgnoreCase) >= 0;
+
+                                    // --- לוגיקת ההחלטה ---
 
                                     if (isAppDevPath && isAppLogName)
                                     {
@@ -103,14 +122,14 @@ namespace IndiLogs_3._0.Services
                                         entryData.Stream = CopyToMemory(entry);
                                         filesToProcess.Add(entryData);
                                     }
-                                    else if (entry.Name.IndexOf("engineGroupA.file", StringComparison.OrdinalIgnoreCase) >= 0 ||
-                                             (entry.Name.EndsWith(".log", StringComparison.OrdinalIgnoreCase) && !isAppDevPath))
+                                    else if (isMainLogName)
                                     {
+                                        // הסרנו את התנאי הכללי (entry.Name.EndsWith(".log")) כדי לא לטעון לוגים לא נחוצים
                                         entryData.Type = FileType.MainLog;
                                         entryData.Stream = CopyToMemory(entry);
                                         filesToProcess.Add(entryData);
                                     }
-                                    else if (entry.Name.EndsWith(".csv", StringComparison.OrdinalIgnoreCase))
+                                    else if (isEventsCsv)
                                     {
                                         entryData.Type = FileType.EventsCsv;
                                         entryData.Stream = CopyToMemory(entry);
@@ -174,7 +193,7 @@ namespace IndiLogs_3._0.Services
                         }
                         else
                         {
-                            // --- שינוי 2: זיהוי קבצים בודדים (לא ב-ZIP) ---
+                            // טעינת קובץ בודד (לא ZIP)
                             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.Read))
                             using (var ms = new MemoryStream())
                             {
@@ -197,10 +216,7 @@ namespace IndiLogs_3._0.Services
                     progress?.Report((98, "Sorting..."));
 
                     session.Logs = logsBag.OrderByDescending(x => x.Date).ToList();
-
-                    // המיון כאן מבטיח שהחדש למעלה והישן למטה
                     session.AppDevLogs = appDevLogsBag.OrderByDescending(x => x.Date).ToList();
-
                     session.Events = eventsBag.OrderByDescending(x => x.Time).ToList();
                     session.Screenshots = screenshotsBag.ToList();
 
@@ -314,8 +330,6 @@ namespace IndiLogs_3._0.Services
             return list;
         }
 
-        // חפש את הפונקציה ParseEventsCsv והחלף אותה (או את הלולאה הפנימית) בקוד הבא:
-
         private List<EventEntry> ParseEventsCsv(Stream stream)
         {
             var list = new List<EventEntry>();
@@ -334,7 +348,7 @@ namespace IndiLogs_3._0.Services
                     int stateIdx = Array.IndexOf(headers, "State");
                     int severityIdx = Array.IndexOf(headers, "Severity");
                     int subsystemIdx = Array.IndexOf(headers, "Subsystem");
-                    int paramsIdx = Array.IndexOf(headers, "Parameters"); // <-- זיהוי העמודה החדשה
+                    int paramsIdx = Array.IndexOf(headers, "Parameters");
 
                     while (!reader.EndOfStream)
                     {
@@ -354,7 +368,6 @@ namespace IndiLogs_3._0.Services
                                     State = (stateIdx >= 0 && parts.Count > stateIdx) ? parts[stateIdx] : "",
                                     Severity = (severityIdx >= 0 && parts.Count > severityIdx) ? parts[severityIdx] : "",
                                     Description = (subsystemIdx >= 0 && parts.Count > subsystemIdx) ? parts[subsystemIdx] : "",
-                                    // קריאת הפרמטרים
                                     Parameters = (paramsIdx >= 0 && parts.Count > paramsIdx) ? parts[paramsIdx] : ""
                                 };
                                 if (!string.IsNullOrWhiteSpace(entry.Name)) list.Add(entry);

@@ -6,6 +6,8 @@
         <FontFamily x:Key="UIFontFamily">Segoe UI Variable Display, Segoe UI</FontFamily>
         <FontWeight x:Key="ContentFontWeight">Normal</FontWeight>
 
+        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
+
         <SolidColorBrush x:Key="BgDark" Color="#121212"/>
         <SolidColorBrush x:Key="BgPanel" Color="#1E1E24"/>
         <SolidColorBrush x:Key="BgCard" Color="#25252D"/>
@@ -27,12 +29,10 @@
         <SolidColorBrush x:Key="WarningColor" Color="#F59E0B"/>
         <SolidColorBrush x:Key="SuccessColor" Color="#10B981"/>
 
-        <SolidColorBrush x:Key="AnimColor1" Color="#00E5FF"/>
-        <SolidColorBrush x:Key="AnimColor2" Color="#F50057"/>
+        <SolidColorBrush x:Key="AnimColor1" Color="#00FFFF"/>
+        <SolidColorBrush x:Key="AnimColor2" Color="#FF00FF"/>
+        <SolidColorBrush x:Key="AnimColor3" Color="#FFFF00"/>
         <SolidColorBrush x:Key="AnimText" Color="#FFFFFF"/>
-
-        <BooleanToVisibilityConverter x:Key="BooleanToVisibilityConverter" />
-
         <Style TargetType="ScrollBar">
             <Setter Property="Background" Value="Transparent"/>
             <Setter Property="Width" Value="10"/>
@@ -173,7 +173,6 @@
             <Setter Property="BorderThickness" Value="0"/>
             <Setter Property="Padding" Value="4"/>
             <Setter Property="Margin" Value="0,1"/>
-
             <Setter Property="ToolTipService.InitialShowDelay" Value="500"/>
             <Setter Property="ToolTip">
                 <Setter.Value>
@@ -186,7 +185,6 @@
                     </ToolTip>
                 </Setter.Value>
             </Setter>
-
             <Style.Triggers>
                 <DataTrigger Binding="{Binding Level}" Value="Error">
                     <Setter Property="Foreground" Value="White"/>
@@ -197,13 +195,11 @@
                 <DataTrigger Binding="{Binding Level}" Value="Fatal">
                     <Setter Property="Foreground" Value="White"/>
                 </DataTrigger>
-
                 <Trigger Property="IsSelected" Value="True">
                     <Setter Property="Background" Value="#FFEB3B"/>
                     <Setter Property="Foreground" Value="Black"/>
                     <Setter Property="BorderBrush" Value="Transparent"/>
                 </Trigger>
-
                 <Trigger Property="IsMouseOver" Value="True">
                     <Setter Property="Background" Value="#1AFFFFFF"/>
                 </Trigger>
