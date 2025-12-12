@@ -41,6 +41,39 @@ namespace IndiLogs_3._0.ViewModels
         private List<ColoringCondition> _appColoringRules = new List<ColoringCondition>();
         private List<LogEntry> _lastFilteredAppCache;
         private bool _isAppTimeFocusActive;
+        private VisualAnalysisViewModel _visualAnalysisVM;
+        public VisualAnalysisViewModel VisualAnalysisVM
+        {
+            get => _visualAnalysisVM;
+            set { _visualAnalysisVM = value; OnPropertyChanged(); }
+        }
+        public ICommand OpenVisualAnalysisCommand => new RelayCommand(OpenVisualAnalysis);
+        private void OpenVisualAnalysis(object obj)
+        {
+            if (SelectedSession == null || SelectedSession.CachedStates == null || !SelectedSession.CachedStates.Any())
+            {
+                MessageBox.Show("Please run 'Run Analysis' or 'States' first to generate state data.", "No Data");
+                return;
+            }
+
+            // אתחול ה-VM של הויזואליזציה
+            if (VisualAnalysisVM == null) VisualAnalysisVM = new VisualAnalysisViewModel();
+
+            // טעינת נתונים (הסטייטים שחושבו והלוגים הגולמיים)
+            VisualAnalysisVM.LoadDataAsync(SelectedSession.CachedStates, SelectedSession.Logs);
+
+            // כאן אפשר לפתוח חלון חדש או להוסיף טאב חדש ל-UI
+            var win = new Window
+            {
+                Title = "Visual Analysis (Gantt & Events)",
+                Content = new Views.VisualAnalysisView { DataContext = VisualAnalysisVM },
+                Width = 1000,
+                Height = 600,
+                Background = (System.Windows.Media.Brush)Application.Current.Resources["BgDark"]
+            };
+            win.Show();
+        }
+
         public GraphsViewModel GraphsVM { get; set; }
         public ICommand OpenIndigoInvadersCommand { get; }
         public ICommand FilterAppErrorsCommand { get; }

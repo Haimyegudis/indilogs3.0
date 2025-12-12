@@ -67,7 +67,17 @@
                             <TextBlock Text="VERSION 3.0" FontWeight="Normal" FontSize="10" Foreground="{DynamicResource PrimaryColor}" HorizontalAlignment="Right" Margin="0,-2,0,0"/>
                         </StackPanel>
                     </StackPanel>
-
+                    <Button Command="{Binding OpenVisualAnalysisCommand}" 
+        Style="{DynamicResource ModernBtn}" 
+        Background="{DynamicResource BgPanel}" 
+        BorderBrush="{DynamicResource BorderColor}" 
+        BorderThickness="1" 
+        Foreground="{DynamicResource TextPrimary}" 
+        Margin="0,0,0,5">
+                        <Viewbox Stretch="Uniform" StretchDirection="DownOnly">
+                            <TextBlock Text="📊 Visual Gantt"/>
+                        </Viewbox>
+                    </Button>
                     <Button Command="{Binding LoadCommand}" Style="{DynamicResource PrimaryBtn}" 
                     ToolTip="Load Files... (Drag &amp; Drop supported)" Width="140" Height="40">
                         <StackPanel Orientation="Horizontal">

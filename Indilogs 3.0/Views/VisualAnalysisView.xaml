@@ -1,0 +1,69 @@
+﻿<UserControl x:Class="IndiLogs_3._0.Views.VisualAnalysisView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:oxy="http://oxyplot.org/wpf"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             mc:Ignorable="d"
+             d:DesignHeight="600" d:DesignWidth="800">
+
+    <Grid Background="{DynamicResource BgDark}">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*" MinHeight="250"/>
+            <RowDefinition Height="5"/>
+            <RowDefinition Height="*" MinHeight="150"/>
+            <RowDefinition Height="30"/>
+        </Grid.RowDefinitions>
+
+        <!-- Top: Gantt Chart -->
+        <Border Grid.Row="0" Background="{DynamicResource BgCard}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="5">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="TIMELINE VISUALIZATION (GANTT)" Foreground="{DynamicResource PrimaryColor}" FontWeight="Bold" Margin="10,5"/>
+
+                <oxy:PlotView Grid.Row="1" Model="{Binding AnalysisModel}" Background="Transparent" Margin="0,0,0,5"/>
+            </Grid>
+        </Border>
+
+        <!-- Splitter -->
+        <GridSplitter Grid.Row="1" HorizontalAlignment="Stretch" Background="{DynamicResource BorderColor}" Height="5"/>
+
+        <!-- Bottom: Scoped Logs -->
+        <Border Grid.Row="2" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="5">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <TextBlock Text="LOG DATA (CONTEXT)" Foreground="{DynamicResource TextSecondary}" FontWeight="Bold" Margin="10,5"/>
+
+                <DataGrid x:Name="DetailGrid" 
+                          ItemsSource="{Binding ScopeLogs}"
+                          SelectedItem="{Binding SelectedLogDetail}"
+                          Background="Transparent" 
+                          RowStyle="{DynamicResource LogRowStyle}"
+                          AutoGenerateColumns="False"
+                          BorderThickness="0"
+                          HeadersVisibility="Column"
+                          IsReadOnly="True">
+                    <DataGrid.Columns>
+                        <DataGridTextColumn Header="Time" Binding="{Binding Date, StringFormat='HH:mm:ss.fff'}" Width="120"/>
+                        <DataGridTextColumn Header="Level" Binding="{Binding Level}" Width="60" FontWeight="Bold"/>
+                        <DataGridTextColumn Header="Thread" Binding="{Binding ThreadName}" Width="100"/>
+                        <DataGridTextColumn Header="Message" Binding="{Binding Message}" Width="*"/>
+                    </DataGrid.Columns>
+                </DataGrid>
+            </Grid>
+        </Border>
+
+        <!-- Status Bar -->
+        <StatusBar Grid.Row="3" Background="{DynamicResource PrimaryColor}">
+            <TextBlock Text="{Binding StatusMessage}" Foreground="White" FontWeight="SemiBold" Margin="5,0"/>
+        </StatusBar>
+    </Grid>
+</UserControl>

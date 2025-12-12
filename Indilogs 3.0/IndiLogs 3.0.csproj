@@ -189,6 +189,8 @@
     <Compile Include="Models\GraphModels.cs" />
     <Compile Include="Models\LoggerNode.cs" />
     <Compile Include="Models\StateEntry.cs" />
+    <Compile Include="Services\VisualGraphService.cs" />
+    <Compile Include="ViewModels\VisualAnalysisViewModel.cs" />
     <Compile Include="Views\ColorPaletteWindow.xaml.cs">
       <DependentUpon>ColorPaletteWindow.xaml</DependentUpon>
     </Compile>
@@ -272,6 +274,9 @@
       <DependentUpon>MainWindow.xaml</DependentUpon>
       <SubType>Code</SubType>
     </Compile>
+    <Compile Include="Views\VisualAnalysisView.xaml.cs">
+      <DependentUpon>VisualAnalysisView.xaml</DependentUpon>
+    </Compile>
     <Page Include="Views\FilterOutWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
@@ -341,6 +346,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\AnalysisReportWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\VisualAnalysisView.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
