@@ -459,6 +459,9 @@ namespace IndiLogs_3._0.ViewModels
         public ICommand FilterToStateCommand { get; }
         public ICommand OpenStatesWindowCommand { get; }
 
+        // --- SNAKE GAME COMMAND ---
+        public ICommand OpenSnakeGameCommand { get; }
+
         // Live Commands
         public ICommand LivePlayCommand { get; }
         public ICommand LivePauseCommand { get; }
@@ -559,6 +562,9 @@ namespace IndiLogs_3._0.ViewModels
             ToggleBoldCommand = new RelayCommand(o => IsBold = !IsBold);
             OpenSettingsCommand = new RelayCommand(OpenSettingsWindow);
             OpenFontsWindowCommand = new RelayCommand(OpenFontsWindow);
+
+            // --- SNAKE GAME COMMAND INITIALIZATION ---
+            OpenSnakeGameCommand = new RelayCommand(OpenSnakeGame);
 
             FilterToStateCommand = new RelayCommand(FilterToState);
 
@@ -1932,5 +1938,15 @@ namespace IndiLogs_3._0.ViewModels
 
         public event PropertyChangedEventHandler PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+        // --- SNAKE GAME LOGIC ---
+        private void OpenSnakeGame(object obj)
+        {
+            // וודא שיצרת את הקובץ SnakeWindow בתיקיית Views
+            // אם לא יצרת אותו, הקוד יקרוס כאן!
+            var snakeWindow = new IndiLogs_3._0.Views.SnakeWindow();
+            snakeWindow.Owner = Application.Current.MainWindow;
+            snakeWindow.ShowDialog();
+        }
     }
 }

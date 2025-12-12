@@ -21,6 +21,7 @@
     </Window.DataContext>
 
     <Window.InputBindings>
+        <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding OpenSnakeGameCommand}" />
         <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoFilterOutCommand}" />
         <KeyBinding Key="OemPlus" Modifiers="Ctrl" Command="{Binding ZoomInCommand}" />

@@ -201,6 +201,9 @@
     <Compile Include="Views\MarkedLogsWindow.xaml.cs">
       <DependentUpon>MarkedLogsWindow.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\SnakeWindow.xaml.cs">
+      <DependentUpon>SnakeWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\StatesWindow.xaml.cs">
       <DependentUpon>StatesWindow.xaml</DependentUpon>
     </Compile>
@@ -307,6 +310,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\MarkedLogsWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\SnakeWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>
