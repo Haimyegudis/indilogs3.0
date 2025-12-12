@@ -3,7 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:sys="clr-namespace:System;assembly=mscorlib"
         xmlns:models="clr-namespace:IndiLogs_3._0.Models"
-        Title="Filter Editor" Height="650" Width="950"
+        Title="Filter Editor" Height="500" Width="800"
         WindowStartupLocation="CenterOwner" 
         Background="{DynamicResource BgDark}"
         Foreground="{DynamicResource TextPrimary}">
@@ -26,28 +26,30 @@
         </x:Array>
 
         <Style TargetType="ComboBox">
-            <Setter Property="Padding" Value="8"/>
+            <Setter Property="Padding" Value="5"/>
             <Setter Property="Margin" Value="5"/>
-            <Setter Property="Height" Value="35"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
         </Style>
+
         <Style TargetType="TextBox">
-            <Setter Property="Padding" Value="6"/>
+            <Setter Property="Padding" Value="5"/>
             <Setter Property="Margin" Value="5"/>
-            <Setter Property="Height" Value="35"/>
-            <Setter Property="FontSize" Value="14"/>
+            <Setter Property="Height" Value="30"/>
+            <Setter Property="FontSize" Value="13"/>
             <Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Background" Value="{DynamicResource BgCard}"/>
             <Setter Property="Foreground" Value="{DynamicResource TextPrimary}"/>
-            <Setter Property="BorderBrush" Value="{DynamicResource BorderColor}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource PrimaryColor}"/>
+            <Setter Property="BorderThickness" Value="1"/>
             <Setter Property="CaretBrush" Value="{DynamicResource PrimaryColor}"/>
         </Style>
 
         <Style x:Key="OperatorLinkStyle" TargetType="TextBlock">
             <Setter Property="Cursor" Value="Hand"/>
             <Setter Property="FontWeight" Value="Bold"/>
-            <Setter Property="FontSize" Value="18"/>
+            <Setter Property="FontSize" Value="14"/>
             <Setter Property="Foreground" Value="{DynamicResource SuccessColor}"/>
             <Style.Triggers>
                 <Trigger Property="IsMouseOver" Value="True">
@@ -66,9 +68,9 @@
         </Style>
 
         <HierarchicalDataTemplate DataType="{x:Type models:FilterNode}" ItemsSource="{Binding Children}">
-            <Border Background="{DynamicResource BgCard}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="4,6" Padding="12">
+            <Border Background="{DynamicResource BgCard}" CornerRadius="8" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" Margin="4,6" Padding="10">
                 <StackPanel>
-                    <StackPanel Orientation="Horizontal" Margin="0,0,0,10">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,5">
                         <StackPanel.Style>
                             <Style TargetType="StackPanel">
                                 <Setter Property="Visibility" Value="Collapsed"/>
@@ -85,7 +87,7 @@
                                    ToolTip="Right-click to change logic or add items"
                                    Tag="{Binding DataContext, RelativeSource={RelativeSource AncestorType=Window}}">
                             <TextBlock.ContextMenu>
-                                <ContextMenu FontSize="14">
+                                <ContextMenu FontSize="13">
                                     <MenuItem Header="AND (All must match)" Command="{Binding PlacementTarget.Tag.SetAndCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                     <MenuItem Header="OR (At least one)" Command="{Binding PlacementTarget.Tag.SetOrCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}" CommandParameter="{Binding}"/>
                                     <Separator/>
@@ -111,7 +113,7 @@
                                 </ContextMenu>
                             </TextBlock.ContextMenu>
                         </TextBlock>
-                        <TextBlock Text=" (Group)" Foreground="{DynamicResource TextSecondary}" FontSize="14" VerticalAlignment="Center" Margin="8,0,0,0" FontStyle="Italic"/>
+                        <TextBlock Text=" (Group)" Foreground="{DynamicResource TextSecondary}" FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" FontStyle="Italic"/>
                     </StackPanel>
 
                     <Grid>
@@ -127,46 +129,47 @@
                         </Grid.Style>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="160"/>
                             <ColumnDefinition Width="140"/>
+                            <ColumnDefinition Width="130"/>
                             <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="50"/>
+                            <ColumnDefinition Width="40"/>
                         </Grid.ColumnDefinitions>
 
-                        <TextBlock Grid.Column="0" Text="Where" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,10,0" FontSize="16" FontWeight="SemiBold"/>
+                        <TextBlock Grid.Column="0" Text="Where" Foreground="{DynamicResource TextSecondary}" VerticalAlignment="Center" Margin="0,0,8,0" FontSize="14" FontWeight="SemiBold"/>
 
-                        <ComboBox Grid.Column="1" ItemsSource="{StaticResource FilterFields}" SelectedItem="{Binding Field}" FontSize="14"/>
-                        <ComboBox Grid.Column="2" ItemsSource="{StaticResource ConditionOperators}" SelectedItem="{Binding Operator}" FontSize="14"/>
-                        <TextBox Grid.Column="3" Text="{Binding Value}" FontSize="14"/>
+                        <ComboBox Grid.Column="1" ItemsSource="{StaticResource FilterFields}" SelectedItem="{Binding Field}"/>
+                        <ComboBox Grid.Column="2" ItemsSource="{StaticResource ConditionOperators}" SelectedItem="{Binding Operator}"/>
+                        <TextBox Grid.Column="3" Text="{Binding Value}"/>
 
                         <Button Grid.Column="4" Command="{Binding DataContext.RemoveNodeCommand, RelativeSource={RelativeSource AncestorType=Window}}" 
                                 CommandParameter="{Binding}" 
-                                Content="✕" Style="{DynamicResource ModernBtn}" Background="Transparent" Foreground="{DynamicResource DangerColor}" FontWeight="Bold" FontSize="16"/>
+                                Content="✕" Style="{DynamicResource ModernBtn}" Background="Transparent" Foreground="{DynamicResource DangerColor}" FontWeight="Bold" FontSize="14" Padding="0"/>
                     </Grid>
                 </StackPanel>
             </Border>
         </HierarchicalDataTemplate>
     </Window.Resources>
 
-    <Grid Margin="25">
+    <Grid Margin="20">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <StackPanel Grid.Row="0" Margin="0,0,0,20">
-            <TextBlock Text="Advanced Filter Editor" FontSize="26" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
-            <TextBlock Text="Build complex queries using groups and logic gates. Right-click on operators (AND/OR) to add conditions." Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0" FontSize="14"/>
+        <StackPanel Grid.Row="0" Margin="0,0,0,15">
+            <TextBlock Text="Advanced Filter Editor" FontSize="22" FontWeight="Bold" Foreground="{DynamicResource TextPrimary}"/>
+            <TextBlock Text="Build complex queries using groups and logic gates. Right-click on operators (AND/OR) to add conditions." Foreground="{DynamicResource TextSecondary}" Margin="0,5,0,0" FontSize="13"/>
         </StackPanel>
 
         <Border Grid.Row="1" Background="{DynamicResource BgPanel}" BorderBrush="{DynamicResource BorderColor}" BorderThickness="1" CornerRadius="8">
-            <TreeView ItemsSource="{Binding RootNodes}" BorderThickness="0" Background="Transparent" Padding="15">
+            <TreeView ItemsSource="{Binding RootNodes}" BorderThickness="0" Background="Transparent" Padding="10">
                 <TreeView.ItemContainerStyle>
                     <Style TargetType="TreeViewItem">
                         <Setter Property="IsExpanded" Value="True"/>
                         <Setter Property="FocusVisualStyle" Value="{x:Null}"/>
                         <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
                         <Setter Property="Template">
                             <Setter.Value>
                                 <ControlTemplate TargetType="TreeViewItem">
@@ -178,7 +181,7 @@
                                         <Border Name="Bd" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" Padding="{TemplateBinding Padding}">
                                             <ContentPresenter Name="PART_Header" ContentSource="Header" HorizontalAlignment="{TemplateBinding HorizontalContentAlignment}"/>
                                         </Border>
-                                        <ItemsPresenter Name="ItemsHost" Grid.Row="1" Margin="25,0,0,0"/>
+                                        <ItemsPresenter Name="ItemsHost" Grid.Row="1" Margin="20,0,0,0"/>
                                     </Grid>
                                 </ControlTemplate>
                             </Setter.Value>
@@ -188,10 +191,10 @@
             </TreeView>
         </Border>
 
-        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,25,0,0">
-            <Button Content="🗑 Reset" Click="Clear_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource DangerColor}" Foreground="White" Width="120" Height="40" FontSize="14"/>
-            <Button Content="✔ Apply Filter" Click="Apply_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource SuccessColor}" Foreground="White" Margin="15,0" Width="140" Height="40" FontSize="14" FontWeight="Bold"/>
-            <Button Content="Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Width="120" Height="40" FontSize="14"/>
+        <StackPanel Grid.Row="2" Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,20,0,0">
+            <Button Content="🗑 Reset" Click="Clear_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource DangerColor}" Foreground="White" Width="100"/>
+            <Button Content="✔ Apply Filter" Click="Apply_Click" Style="{DynamicResource ModernBtn}" Background="{DynamicResource SuccessColor}" Foreground="White" Margin="10,0" Width="120" FontWeight="Bold"/>
+            <Button Content="Cancel" Click="Cancel_Click" Style="{DynamicResource ModernBtn}" Width="100"/>
         </StackPanel>
     </Grid>
 </Window>
