@@ -42,6 +42,7 @@ namespace IndiLogs_3._0.ViewModels
         private List<LogEntry> _lastFilteredAppCache;
         private bool _isAppTimeFocusActive;
         public GraphsViewModel GraphsVM { get; set; }
+        public ICommand OpenIndigoInvadersCommand { get; }
         public ICommand FilterAppErrorsCommand { get; }
         // --- Services ---
         private readonly LogFileService _logService;
@@ -481,6 +482,7 @@ namespace IndiLogs_3._0.ViewModels
 
         public MainViewModel()
         {
+
             _csvService = new CsvExportService();
             _logService = new LogFileService();
             _coloringService = new LogColoringService();
@@ -492,7 +494,7 @@ namespace IndiLogs_3._0.ViewModels
             TreeShowWithChildrenCommand = new RelayCommand(ExecuteTreeShowWithChildren);
             TreeHideWithChildrenCommand = new RelayCommand(ExecuteTreeHideWithChildren);
             TreeShowAllCommand = new RelayCommand(ExecuteTreeShowAll);
-
+            OpenIndigoInvadersCommand = new RelayCommand(OpenIndigoInvaders);
             _allLogsCache = new List<LogEntry>();
             Logs = new List<LogEntry>();
             LoadedSessions = new ObservableCollection<LogSessionData>();
@@ -650,7 +652,13 @@ namespace IndiLogs_3._0.ViewModels
                 }
             }
         }
-
+        private void OpenIndigoInvaders(object obj)
+        {
+            // וודא שהקובץ קיים וה-Namespace נכון
+            var invadersWindow = new IndiLogs_3._0.Views.IndigoInvadersWindow();
+            invadersWindow.Owner = Application.Current.MainWindow;
+            invadersWindow.ShowDialog();
+        }   
         private void SwitchToSession(LogSessionData session)
         {
             _isMainFilterActive = false;

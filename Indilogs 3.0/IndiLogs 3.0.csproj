@@ -198,6 +198,9 @@
     <Compile Include="Views\GraphsView.xaml.cs">
       <DependentUpon>GraphsView.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Views\IndigoInvadersWindow.xaml.cs">
+      <DependentUpon>IndigoInvadersWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Views\MarkedLogsWindow.xaml.cs">
       <DependentUpon>MarkedLogsWindow.xaml</DependentUpon>
     </Compile>
@@ -278,6 +281,10 @@
       <Generator>MSBuild:Compile</Generator>
     </Page>
     <Page Include="Views\HelpWindow.xaml">
+      <SubType>Designer</SubType>
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+    <Page Include="Views\IndigoInvadersWindow.xaml">
       <SubType>Designer</SubType>
       <Generator>MSBuild:Compile</Generator>
     </Page>

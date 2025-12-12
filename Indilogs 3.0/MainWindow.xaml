@@ -22,6 +22,7 @@
 
     <Window.InputBindings>
         <KeyBinding Key="S" Modifiers="Ctrl" Command="{Binding OpenSnakeGameCommand}" />
+        <KeyBinding Key="I" Modifiers="Ctrl" Command="{Binding OpenIndigoInvadersCommand}" />
         <KeyBinding Key="Space" Command="{Binding MarkRowCommand}" />
         <KeyBinding Key="Z" Modifiers="Ctrl" Command="{Binding UndoFilterOutCommand}" />
         <KeyBinding Key="OemPlus" Modifiers="Ctrl" Command="{Binding ZoomInCommand}" />
@@ -96,7 +97,7 @@
                             <StackPanel Orientation="Horizontal">
                                 <Button Command="{Binding LivePlayCommand}" 
                                 Visibility="{Binding IsPaused, Converter={StaticResource BooleanToVisibilityConverter}}"
-                                             Style="{DynamicResource ModernBtn}" ToolTip="Resume Live Monitoring" Background="Transparent" Foreground="{DynamicResource SuccessColor}" Padding="5,0">
+                                            Style="{DynamicResource ModernBtn}" ToolTip="Resume Live Monitoring" Background="Transparent" Foreground="{DynamicResource SuccessColor}" Padding="5,0">
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="▶" Margin="0,0,5,0"/>
                                         <TextBlock Text="RESUME" FontWeight="Bold"/>
@@ -140,6 +141,9 @@
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding SelectedIndex, ElementName=LeftPanelTabs}" Value="1">
                                     <Setter Property="Width" Value="Auto"/>
+                                </DataTrigger>
+                                <DataTrigger Binding="{Binding SelectedIndex, ElementName=MainTabs}" Value="7">
+                                    <Setter Property="Width" Value="0"/>
                                 </DataTrigger>
                             </Style.Triggers>
                         </Style>
@@ -988,7 +992,7 @@
                                         <DataTemplate>
                                             <Border BorderBrush="#333" BorderThickness="1" Margin="20">
                                                 <Image Source="{Binding}" 
-                                                   Width="{Binding DataContext.ScreenshotZoom, RelativeSource={RelativeSource AncestorType=Window}}" 
+                                                       Width="{Binding DataContext.ScreenshotZoom, RelativeSource={RelativeSource AncestorType=Window}}" 
                                                    Stretch="Uniform"/>
                                             </Border>
                                         </DataTemplate>
